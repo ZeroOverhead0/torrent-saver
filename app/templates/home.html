@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}Dashboard · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <form method="post" action="{{ R }}/pause" class="inline">
+    <button class="btn {{ 'btn-warn' if not paused else 'btn-ok' }}">
+      {{ 'Resume' if paused else 'Pause all' }}
+    </button>
+  </form>
+</div>
+
+<section class="cards">
+  <div class="card {{ 'good' if qbit_ok else 'bad' }}">
+    <div class="card-label">qBittorrent</div>
+    <div class="card-value">{{ 'Connected' if qbit_ok else 'Offline' }}</div>
+    <div class="card-sub">{% if not qbit_ok %}<a href="{{ R }}/settings">configure</a>{% else %}engine ready{% endif %}</div>
+  </div>
+
+  <div class="card {{ 'good' if (vpn and vpn.killswitch and not vpn.leaking) else ('bad' if vpn_required else 'warn') }}">
+    <div class="card-label">VPN / kill-switch</div>
+    <div class="card-value">
+      {% if vpn and vpn.connected %}{{ vpn.interface or 'up' }}{% else %}none{% endif %}
+    </div>
+    <div class="card-sub">
+      {% if vpn and vpn.leaking %}<span class="bad-text">LEAK</span>
+      {% elif vpn and vpn.killswitch %}kill-switch on
+      {% elif vpn_required %}required — <a href="{{ R }}/vpn">set up</a>
+      {% else %}not required{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Seeding now</div>
+    <div class="card-value">{{ tracked }}</div>
+    <div class="card-sub">{{ library_bytes | bytes }} of {{ profile.max_disk_bytes | bytes }}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Queued to rescue</div>
+    <div class="card-value">{{ queued }}</div>
+    <div class="card-sub"><a href="{{ R }}/discover">review</a> · {{ rescued }} rescued</div>
+  </div>
+</section>
+
+<section class="usage">
+  {% set frac = (library_bytes / profile.max_disk_bytes) if profile.max_disk_bytes else 0 %}
+  <div class="usage-bar"><span style="width: {{ (frac * 100) | round(1) }}%"></span></div>
+  <div class="usage-meta">
+    Machine profile: <b>{{ profile.label }}</b> ·
+    {{ tracked }}/{{ profile.max_torrents }} torrents ·
+    legal-only {{ 'ON' if legal_mode else 'OFF' }} ·
+    auto-rescue {{ 'ON' if auto_rescue else 'OFF (review queue manually)' }} ·
+    demand-seeding {{ 'ON' if demand_enabled else 'off' }}
+    {% if demand %}· {{ demand }} in demand-mode{% endif %}
+  </div>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <div class="panel-head"><h2>Most endangered (queued)</h2>
+      <form method="post" action="{{ R }}/rescue-all" class="inline">
+        <button class="btn btn-sm" {{ 'disabled' if paused else '' }}>Rescue within budget</button>
+      </form>
+    </div>
+    {% if top %}
+    <table class="tbl">
+      <thead><tr><th>Name</th><th>Risk</th><th>Seeds</th><th>Size</th><th></th></tr></thead>
+      <tbody>
+      {% for c in top %}
+        <tr>
+          <td class="name">{{ c.name }}</td>
+          <td><span class="pill pill-{{ band(c.endangerment) }}">{{ c.endangerment }}</span></td>
+          <td>{{ c.seeders }}</td>
+          <td>{{ c.size_bytes | bytes }}</td>
+          <td>
+            <form method="post" action="{{ R }}/rescue/{{ c.infohash }}" class="inline">
+              <button class="btn btn-xs">Rescue</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p class="empty">No queued candidates. Run a scan from <a href="{{ R }}/discover">Discover</a>.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h2>Recent activity</h2></div>
+    <ul class="events">
+      {% for e in events %}
+        <li class="ev ev-{{ e.level }}">
+          <span class="ev-kind">{{ e.kind }}</span>
+          <span class="ev-msg">{{ e.message }}</span>
+          <span class="ev-ago">{{ e.ts | ago }}</span>
+        </li>
+      {% else %}
+        <li class="empty">No activity yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+{% endblock %}

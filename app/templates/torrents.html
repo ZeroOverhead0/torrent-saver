@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}Seeding · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Seeding library</h1>
+  <div class="head-actions">
+    <form method="post" action="{{ R }}/torrents/sync" class="inline"><button class="btn">Sync from qBittorrent</button></form>
+    <form method="post" action="{{ R }}/torrents/evict-now" class="inline"><button class="btn btn-ghost">Run eviction</button></form>
+  </div>
+</div>
+
+<p class="usage-meta">
+  {{ count }}/{{ profile.max_torrents }} torrents · {{ library_bytes | bytes }} of {{ profile.max_disk_bytes | bytes }}
+</p>
+
+<nav class="subnav">
+  <a href="{{ R }}/torrents?view=live" class="{{ 'active' if view!='evicted' else '' }}">Live</a>
+  <a href="{{ R }}/torrents?view=evicted" class="{{ 'active' if view=='evicted' else '' }}">Evicted history</a>
+</nav>
+
+<table class="tbl">
+  <thead><tr>
+    <th>Name</th><th>Mode</th><th>State</th><th>Seeds</th><th>Leech</th>
+    <th>Ratio</th><th>Up</th><th>Size</th>
+    {% if view=='evicted' %}<th>Evicted</th>{% else %}<th>Risk</th><th></th>{% endif %}
+  </tr></thead>
+  <tbody>
+  {% for t in rows %}
+    <tr>
+      <td class="name">{{ t.name }}</td>
+      <td><span class="tag {{ 'tag-ok' if t.mode=='demand' else '' }}">{{ t.mode }}</span></td>
+      <td>{{ t.qbit_state or '—' }}</td>
+      <td>{{ t.seeders }}</td>
+      <td>{{ t.leechers }}</td>
+      <td>{{ '%.2f' | format(t.ratio or 0) }}</td>
+      <td>{{ t.uploaded_bytes | bytes }}</td>
+      <td>{{ t.size_bytes | bytes }}</td>
+      {% if view=='evicted' %}
+        <td title="{{ t.evict_reason }}">{{ t.evicted_at | ago }}</td>
+      {% else %}
+        <td><span class="pill pill-{{ band(t.endangerment) }}">{{ t.endangerment }}</span></td>
+        <td class="row-actions">
+          <form method="post" action="{{ R }}/torrent/{{ t.infohash }}/pause" class="inline"><button class="btn btn-xs btn-ghost">pause</button></form>
+          <form method="post" action="{{ R }}/torrent/{{ t.infohash }}/resume" class="inline"><button class="btn btn-xs btn-ghost">resume</button></form>
+          <form method="post" action="{{ R }}/torrent/{{ t.infohash }}/evict" class="inline" data-confirm="Evict and delete files for this torrent?"><button class="btn btn-xs btn-warn">evict</button></form>
+        </td>
+      {% endif %}
+    </tr>
+  {% else %}
+    <tr><td colspan="11" class="empty">Nothing seeded yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

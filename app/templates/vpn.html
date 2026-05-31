@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}VPN · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head"><h1>VPN &amp; kill-switch</h1></div>
+
+<section class="cards">
+  <div class="card {{ 'good' if status.get('connected') else 'bad' }}">
+    <div class="card-label">Tunnel</div>
+    <div class="card-value">{{ status.get('interface') or 'none' }}</div>
+    <div class="card-sub">{{ 'connected' if status.get('connected') else 'no VPN interface' }}</div>
+  </div>
+  <div class="card {{ 'good' if status.get('killswitch') else 'warn' }}">
+    <div class="card-label">Kill-switch</div>
+    <div class="card-value">{{ 'engaged' if status.get('killswitch') else 'off' }}</div>
+    <div class="card-sub">qBittorrent {{ 'bound to tunnel' if status.get('killswitch') else 'not bound' }}</div>
+  </div>
+  <div class="card {{ 'bad' if status.get('leaking') else 'good' }}">
+    <div class="card-label">Leak check</div>
+    <div class="card-value">{{ 'LEAK' if status.get('leaking') else 'ok' }}</div>
+    <div class="card-sub">public IP {{ status.get('public_ip') or '—' }}</div>
+  </div>
+</section>
+
+{% if status.get('detail') %}<p class="hint">{{ status.detail }}</p>{% endif %}
+<p class="usage-meta">Last checked {{ status.get('ts') | ago }}.</p>
+
+<div class="head-actions">
+  <form method="post" action="{{ R }}/vpn/check" class="inline"><button class="btn">Re-check VPN</button></form>
+  <form method="post" action="{{ R }}/vpn/killswitch" class="inline"><button class="btn">Engage kill-switch</button></form>
+  <form method="post" action="{{ R }}/vpn/harden" class="inline"><button class="btn btn-ok">Apply hardening + bind</button></form>
+</div>
+
+<form method="post" action="{{ R }}/vpn/save">
+  <fieldset>
+    <legend>VPN configuration</legend>
+    <label class="chk"><input type="checkbox" name="vpn_required" {{ 'checked' if vpn_required }}>
+      <b>Require a verified VPN to seed unrestricted content</b> (legal content is exempt)</label>
+    <label class="chk"><input type="checkbox" name="vpn_killswitch" {{ 'checked' if vpn_killswitch }}>
+      <b>Kill-switch</b> — bind qBittorrent to the VPN interface (traffic dies if the tunnel drops)</label>
+
+    <div class="grid2">
+      <label>Provider
+        <select name="vpn_provider">
+          {% for p in providers %}<option value="{{ p.key }}" {{ 'selected' if vpn_provider==p.key }}>{{ p.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Tunnel interface
+        <input type="text" name="vpn_interface" list="ifaces" value="{{ vpn_interface }}" placeholder="utun4 / wg0">
+        <datalist id="ifaces">{% for n in tunnels %}<option value="{{ n }}">{% endfor %}</datalist>
+      </label>
+      <label>Your real ISP IP (baseline, for leak detection)
+        <input type="text" name="vpn_baseline_ip" value="{{ vpn_baseline_ip }}" placeholder="e.g. 81.2.x.x">
+      </label>
+    </div>
+  </fieldset>
+  <button class="btn btn-ok">Save VPN settings</button>
+</form>
+
+<section class="panel">
+  <div class="panel-head"><h2>Detected interfaces</h2></div>
+  <table class="tbl">
+    <thead><tr><th>Interface</th><th>IPv4</th><th>Type</th></tr></thead>
+    <tbody>
+    {% for name, ip in interfaces.items() %}
+      <tr><td>{{ name }}</td><td>{{ ip }}</td><td>{{ 'tunnel' if name in tunnels else 'local' }}</td></tr>
+    {% else %}
+      <tr><td colspan="3" class="empty">No interfaces detected.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

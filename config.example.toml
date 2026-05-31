@@ -1,0 +1,43 @@
+# Torrent Saver — optional seed config.
+#
+# Torrent Saver stores all settings in SQLite (data/torrents.db) and is fully
+# configurable from the web UI, so you do NOT need this file. It exists only to
+# bootstrap a fresh install non-interactively (e.g. in Docker). If present at
+# the repo root as `config.toml`, values here are written into the settings DB
+# ON FIRST RUN ONLY (existing DB values win).
+
+[general]
+legal_mode = true            # only rescue legal/whitelisted sources
+auto_rescue = false          # false = queue candidates for review; true = add unattended
+machine_profile = "small"    # potato | small | medium | large | server | custom
+
+[discovery]
+endangered_max_seeders = 5
+min_seeders_to_rescue = 1
+max_redundancy = 2
+scan_interval_min = 60
+
+[sources]
+internet_archive = true
+academic_torrents = true
+linuxtracker = true
+prowlarr = false             # needs prowlarr_url + an API key (set as a secret in the UI)
+prowlarr_url = ""
+
+[demand_seeding]
+enabled = false
+min_upload_mbps = 50
+max_torrents = 20
+
+[vpn]
+required = true              # refuse to seed unrestricted content without a verified VPN
+provider = "wireguard"
+interface = ""              # e.g. utun4 (macOS) or wg0 (Linux)
+killswitch = true
+baseline_ip = ""           # your real ISP IP, used to detect leaks
+
+[qbittorrent]
+url = "http://127.0.0.1:8080"
+username = "admin"
+# password is a secret — set it in the UI or via QBIT_PASSWORD env, never here.
+category = "torrent-saver"

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}Settings · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head"><h1>Settings</h1></div>
+
+<form method="post" action="{{ R }}/settings">
+
+  <fieldset>
+    <legend>Behaviour</legend>
+    <label class="chk"><input type="checkbox" name="legal_mode" {{ 'checked' if s.legal_mode() }}>
+      <b>Legal-only mode</b> — only rescue whitelisted legal sources</label>
+    <label class="chk"><input type="checkbox" name="auto_rescue" {{ 'checked' if s.get_bool('auto_rescue') }}>
+      <b>Auto-rescue</b> — add queued torrents automatically within budget (off = review manually)</label>
+    <label class="chk"><input type="checkbox" name="tracker_scrape_enabled" {{ 'checked' if s.get_bool('tracker_scrape_enabled') }}>
+      Scrape trackers for live seeder counts</label>
+    <label class="chk"><input type="checkbox" name="drop_suspicious_trackers" {{ 'checked' if s.get_bool('drop_suspicious_trackers') }}>
+      Reject torrents whose trackers all look abusive</label>
+    <label class="chk"><input type="checkbox" name="harden_on_start" {{ 'checked' if s.get_bool('harden_on_start') }}>
+      Apply hardened qBittorrent preferences on startup</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Machine profile (how much of your machine to use)</legend>
+    <select name="machine_profile">
+      {% for key, p in profiles.items() %}
+        <option value="{{ key }}" {{ 'selected' if profile.key==key }}>{{ p.label }}</option>
+      {% endfor %}
+      <option value="custom" {{ 'selected' if profile.key=='custom' }}>Custom (use fields below)</option>
+    </select>
+    <p class="hint">Active: <b>{{ profile.label }}</b> — up to {{ profile.max_disk_bytes | bytes }} disk,
+      {{ profile.max_torrents }} torrents,
+      {{ (profile.upload_limit_bytes_s | bytes) + '/s' if profile.upload_limit_bytes_s else 'unlimited' }} upload,
+      ratio cap {{ profile.ratio_limit }}.</p>
+    <div class="grid3">
+      <label>Custom max disk (GB)<input type="number" step="0.1" name="custom_max_disk_gb" value="{{ s.get_str('custom_max_disk_gb') }}"></label>
+      <label>Reserve free (GB)<input type="number" step="0.1" name="custom_reserve_gb" value="{{ s.get_str('custom_reserve_gb') }}"></label>
+      <label>Max torrents<input type="number" name="custom_max_torrents" value="{{ s.get_str('custom_max_torrents') }}"></label>
+      <label>Max torrent size (GB)<input type="number" step="0.1" name="custom_max_torrent_size_gb" value="{{ s.get_str('custom_max_torrent_size_gb') }}"></label>
+      <label>Upload cap (KB/s, 0=∞)<input type="number" name="custom_upload_limit_kbps" value="{{ s.get_str('custom_upload_limit_kbps') }}"></label>
+      <label>Ratio cap<input type="number" step="0.1" name="custom_ratio_limit" value="{{ s.get_str('custom_ratio_limit') }}"></label>
+      <label>Seed-time cap (min, -1=∞)<input type="number" name="custom_seeding_time_limit_min" value="{{ s.get_str('custom_seeding_time_limit_min') }}"></label>
+      <label>Max connections<input type="number" name="custom_max_connections" value="{{ s.get_str('custom_max_connections') }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Discovery &amp; endangerment</legend>
+    <div class="grid3">
+      <label>Endangered at ≤ N seeders<input type="number" name="endangered_max_seeders" value="{{ s.get_str('endangered_max_seeders') }}"></label>
+      <label>Min seeders to rescue<input type="number" name="min_seeders_to_rescue" value="{{ s.get_str('min_seeders_to_rescue') }}"></label>
+      <label>Max healthy duplicates<input type="number" name="max_redundancy" value="{{ s.get_str('max_redundancy') }}"></label>
+      <label>Duplicate "healthy" seeders<input type="number" name="redundancy_healthy_seeders" value="{{ s.get_str('redundancy_healthy_seeders') }}"></label>
+      <label>Title similarity (0–1)<input type="number" step="0.01" name="dedup_title_similarity" value="{{ s.get_str('dedup_title_similarity') }}"></label>
+      <label>Size tolerance (0–1)<input type="number" step="0.01" name="dedup_size_tolerance" value="{{ s.get_str('dedup_size_tolerance') }}"></label>
+      <label>Endangerment floor (0–100)<input type="number" name="min_endangerment_to_queue" value="{{ s.get_str('min_endangerment_to_queue') }}"></label>
+      <label>Scan interval (min)<input type="number" name="scan_interval_min" value="{{ s.get_str('scan_interval_min') }}"></label>
+      <label>Monitor interval (min)<input type="number" name="monitor_interval_min" value="{{ s.get_str('monitor_interval_min') }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Rescue scope (how far down the dying scale to reach)</legend>
+    <label class="chk"><input type="checkbox" name="require_recoverable" {{ 'checked' if s.get_bool('require_recoverable') }}>
+      <b>Only rescue what I can actually download</b> (a live seeder or a webseed). Uncheck to also attempt <b>truly-dead</b> torrents (0 seeders, no webseed) as DHT long-shots.</label>
+    <div class="grid2">
+      <label>Skip junk — minimum lifetime downloads (0 = off; webseed torrents exempt)<input type="number" name="min_download_history" value="{{ s.get_str('min_download_history') }}"></label>
+    </div>
+    <p class="hint">"Endangered when seeders ≤ N" and the duplicate-health threshold are in <b>Discovery</b> above — that's where dedup decides a copy is "already safe". Tracker scrape carries no last-seen timestamp, so "recently active" is inferred from lifetime downloads + current leechers + webseed presence.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Rescue lifecycle (find → revive → remember → resurrect)</legend>
+    <label class="chk"><input type="checkbox" name="deathwatch_enabled" {{ 'checked' if s.get_bool('deathwatch_enabled') }}>
+      <b>Death-watch</b> — re-scrape known torrents and catch ones sliding toward death</label>
+    <label class="chk"><input type="checkbox" name="reannounce_enabled" {{ 'checked' if s.get_bool('reannounce_enabled') }}>
+      <b>Revive the swarm</b> — re-announce complete torrents to trackers/DHT so they re-seed for everyone</label>
+    <label class="chk"><input type="checkbox" name="metadata_ark_enabled" {{ 'checked' if s.get_bool('metadata_ark_enabled') }}>
+      <b>Metadata ark</b> — save each rescued torrent's .torrent + metadata to disk (the map survives the data)</label>
+    <label class="chk"><input type="checkbox" name="resurrect_search_enabled" {{ 'checked' if s.get_bool('resurrect_search_enabled') }}>
+      <b>Find-me-a-body</b> — for truly-dead torrents, auto-search indexers for a downloadable twin</label>
+    <div class="grid3">
+      <label>Death-watch interval (min)<input type="number" name="deathwatch_interval_min" value="{{ s.get_str('deathwatch_interval_min') }}"></label>
+      <label>Alert when seeders drop to ≤<input type="number" name="deathwatch_alert_seeders" value="{{ s.get_str('deathwatch_alert_seeders') }}"></label>
+      <label>Re-announce interval (min)<input type="number" name="reannounce_interval_min" value="{{ s.get_str('reannounce_interval_min') }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Demand-seeding (big-upload users)</legend>
+    <label class="chk"><input type="checkbox" name="demand_seed_enabled" {{ 'checked' if s.get_bool('demand_seed_enabled') }}>
+      Seed the most in-demand torrents (needs Prowlarr + a VPN)</label>
+    <div class="grid3">
+      <label>Min upload you have (Mbps)<input type="number" name="demand_min_upload_mbps" value="{{ s.get_str('demand_min_upload_mbps') }}"></label>
+      <label>Max demand torrents<input type="number" name="demand_max_torrents" value="{{ s.get_str('demand_max_torrents') }}"></label>
+      <label>"In demand" min seeders<input type="number" name="demand_min_seeders" value="{{ s.get_str('demand_min_seeders') }}"></label>
+      <label>"In demand" min leechers<input type="number" name="demand_min_leechers" value="{{ s.get_str('demand_min_leechers') }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>qBittorrent connection</legend>
+    <div class="grid2">
+      <label>Web UI URL<input type="text" name="qbit_url" value="{{ s.get_str('qbit_url') }}"></label>
+      <label>Username<input type="text" name="qbit_username" value="{{ s.get_str('qbit_username') }}"></label>
+      <label>Password {% if qbit_password_set %}<span class="tag tag-ok">set</span>{% endif %}
+        <input type="password" name="qbit_password" placeholder="{{ '••••••• (unchanged)' if qbit_password_set else 'password' }}"></label>
+      <label>Category<input type="text" name="qbit_category" value="{{ s.get_str('qbit_category') }}"></label>
+      <label>Save path (blank = qBittorrent default)<input type="text" name="qbit_save_path" value="{{ s.get_str('qbit_save_path') }}"></label>
+    </div>
+    <button class="btn btn-ghost" formaction="{{ R }}/settings/qbit-test" formmethod="post">Test connection</button>
+  </fieldset>
+
+  <button class="btn btn-ok btn-lg">Save settings</button>
+</form>
+
+{% endblock %}

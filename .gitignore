@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data (DBs, downloaded .torrent files, logs)
+data/
+logs/
+*.db
+*.db-wal
+*.db-shm
+*.torrent
+
+# Local config / secrets
+.env
+config.toml
+
+# OS
+.DS_Store
+
+# Claude Code / tooling artifacts
+.claude/

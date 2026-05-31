@@ -1,0 +1,66 @@
+# Torrent Saver — full self-hosted stack: the app + qBittorrent.
+#
+#   docker compose up -d
+#   open http://localhost:8080   (Torrent Saver)
+#   open http://localhost:8081   (qBittorrent Web UI — first-run password is in its logs)
+#
+# Then in Torrent Saver → Settings, the qBittorrent URL is pre-seeded to the
+# bundled instance. Set the qBittorrent password there to match.
+#
+# VPN: for unrestricted seeding, route qBittorrent through a VPN. The simplest
+# way is the gluetun container below (uncomment it, fill in your provider), and
+# point qBittorrent's network_interface at tun0. Legal-only mode needs no VPN.
+
+services:
+  torrentsaver:
+    build: .
+    image: torrentsaver:latest
+    container_name: torrentsaver
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ROOT_PATH: ""        # served at root in standalone Docker
+      TORRENTSAVER_DB: /data/torrents.db
+      QBIT_URL: http://qbittorrent:8080
+      QBIT_USERNAME: admin
+      # QBIT_PASSWORD: set this to the qBittorrent WebUI password (see its logs)
+    volumes:
+      - ./data:/data
+    depends_on:
+      - qbittorrent
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Etc/UTC
+      WEBUI_PORT: 8080
+    ports:
+      - "8081:8080"        # qBittorrent WebUI on host :8081
+      - "6881:6881"        # BitTorrent TCP
+      - "6881:6881/udp"    # BitTorrent UDP
+    volumes:
+      - ./qbittorrent/config:/config
+      - ./downloads:/downloads
+    # --- VPN option: route qBittorrent through gluetun (uncomment to enable) ---
+    # network_mode: "service:gluetun"
+    # depends_on:
+    #   - gluetun
+
+  # gluetun:
+  #   image: qmcgaw/gluetun
+  #   container_name: gluetun
+  #   cap_add: [NET_ADMIN]
+  #   environment:
+  #     VPN_SERVICE_PROVIDER: mullvad      # or your provider
+  #     VPN_TYPE: wireguard
+  #     WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
+  #     WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES}
+  #     SERVER_COUNTRIES: Sweden
+  #   ports:
+  #     - "8081:8080"      # move qBittorrent WebUI here when using gluetun
+  #   restart: unless-stopped

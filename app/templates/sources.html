@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}Sources · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head"><h1>Sources</h1></div>
+{% if legal_mode %}<p class="hint">Legal-only mode is ON — non-legal sources are filtered before any download.</p>{% endif %}
+
+<form method="post" action="{{ R }}/sources">
+  <table class="tbl">
+    <thead><tr><th>Enabled</th><th>Source</th><th>Type</th><th>Legal</th><th>Test</th></tr></thead>
+    <tbody>
+    {% for s in sources %}
+      <tr>
+        <td><label class="switch"><input type="checkbox" name="src_{{ s.name }}_enabled"
+              {{ 'checked' if s.enabled else '' }}><span></span></label></td>
+        <td class="name">{{ s.label }}</td>
+        <td>{{ s.kind }}</td>
+        <td>{{ '✓ legal' if s.legal else '— user-defined' }}</td>
+        <td>
+          <button class="btn btn-xs btn-ghost" formaction="{{ R }}/sources/test/{{ s.name }}" formmethod="post">test</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="grid2">
+    <fieldset>
+      <legend>Internet Archive</legend>
+      <label>Search query (advancedsearch syntax)</label>
+      <input type="text" name="internet_archive_query" value="{{ ia_query }}">
+      <p class="hint">Long-tail public-domain content. Seeders are scraped from archive.org trackers.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Prowlarr (optional)</legend>
+      <label>Prowlarr URL</label>
+      <input type="text" name="prowlarr_url" value="{{ prowlarr_url }}" placeholder="http://127.0.0.1:9696">
+      <label>API key {% if prowlarr_key_set %}<span class="tag tag-ok">set</span>{% endif %}</label>
+      <input type="password" name="prowlarr_api_key" placeholder="{{ '••••••• (unchanged)' if prowlarr_key_set else 'paste key' }}">
+      <label>Search terms (comma-separated — Prowlarr has no browse-all)</label>
+      <input type="text" name="prowlarr_queries" value="{{ prowlarr_queries }}" placeholder="ubuntu, debian, public domain">
+      <label class="chk"><input type="checkbox" name="prowlarr_trust_legal" {{ 'checked' if prowlarr_trust_legal else '' }}>
+        Treat my Prowlarr indexers as legal under legal-only mode</label>
+    </fieldset>
+  </div>
+
+  <button class="btn btn-ok">Save sources</button>
+</form>
+
+<p class="hint">Academic Torrents serves a browser challenge to bots — it can't be auto-listed.
+  Rescue specific datasets by pasting their magnet into the Discover watchlist.</p>
+
+{% endblock %}

@@ -1,0 +1,10 @@
+# Core — required.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+jinja2>=3.1
+python-multipart>=0.0.9
+httpx>=0.26
+
+# Everything torrent-related (bencode, magnet parsing, UDP/HTTP tracker scrape)
+# is implemented in pure-Python stdlib (app/bencode.py, app/scrape.py) so there
+# is no libtorrent / heavy native dependency to build.

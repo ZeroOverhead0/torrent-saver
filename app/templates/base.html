@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1120">
+<title>{% block title %}Torrent Saver{% endblock %}</title>
+{% set R = request.scope.root_path %}
+<link rel="stylesheet" href="{{ R }}/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-row">
+    <a href="/" class="hub-home" title="Dashboard hub — all apps">&#127968;</a>
+    <a href="{{ R }}/" class="brand">
+      <span class="brand-mark">&#128190;</span>
+      <span class="brand-text">Torrent&nbsp;Saver</span>
+    </a>
+    <nav class="topnav">
+      {% set nc = nav_counts() %}
+      <a href="{{ R }}/">Dashboard</a>
+      <a href="{{ R }}/discover">Discover{% if nc.queued %}<span class="badge">{{ nc.queued }}</span>{% endif %}</a>
+      <a href="{{ R }}/torrents">Seeding{% if nc.tracked %}<span class="badge ok">{{ nc.tracked }}</span>{% endif %}</a>
+      <a href="{{ R }}/ark">Ark</a>
+      <a href="{{ R }}/sources">Sources</a>
+      <a href="{{ R }}/vpn">VPN</a>
+      <a href="{{ R }}/settings">Settings</a>
+    </nav>
+  </div>
+</header>
+
+{% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="foot">
+  Torrent Saver v{{ app_version }} · rescue dying torrents responsibly ·
+  <a href="https://github.com/ZeroOverhead0/torrent-saver" target="_blank" rel="noopener">docs</a>
+</footer>
+<script src="{{ R }}/static/app.js"></script>
+</body>
+</html>

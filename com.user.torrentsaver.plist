@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent — run Torrent Saver standalone at login and keep it alive.
+  NOT needed when the Claude dashboard hub spawns it (the hub manages the process).
+
+  Install:
+    cp com.user.torrentsaver.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.user.torrentsaver.plist
+  Restart:
+    launchctl kickstart -k gui/$(id -u)/com.user.torrentsaver
+  Edit the two paths below to match where you cloned the repo.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.user.torrentsaver</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/ABSOLUTE/PATH/TO/torrentsaver/run.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/torrentsaver</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>LANG</key>
+    <string>en_GB.UTF-8</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/torrentsaver/logs/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/torrentsaver/logs/launchd.err</string>
+</dict>
+</plist>

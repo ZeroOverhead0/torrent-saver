@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}Ark · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head"><h1>Metadata ark</h1></div>
+<p class="hint">The map to every torrent you've rescued — name, magnet, trackers, webseeds and (when grabbed)
+  the .torrent itself, saved to disk. Even if a torrent dies for good, what it was and how to re-find it lives on here.
+  Files: <code>data/ark/&lt;infohash&gt;/</code>.</p>
+
+<table class="tbl">
+  <thead><tr><th>Name</th><th>Source</th><th>Size</th><th>.torrent</th><th>Trackers</th><th>Archived</th></tr></thead>
+  <tbody>
+  {% for a in items %}
+    <tr>
+      <td class="name" title="{{ a.infohash }}">{{ a.name or a.infohash }}</td>
+      <td>{{ a.source }}</td>
+      <td>{{ a.size_bytes | bytes }}</td>
+      <td>{{ '✓' if a.has_torrent else '—' }}</td>
+      <td>{{ a.trackers | length }}{% if a.webseeds %} · {{ a.webseeds | length }} webseed{% endif %}</td>
+      <td>{{ a.archived_at | ago }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">Nothing archived yet. The ark fills as you rescue torrents.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

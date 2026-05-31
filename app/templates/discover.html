@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% set R = request.scope.root_path %}
+{% block title %}Discover · Torrent Saver{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Discover</h1>
+  <div class="head-actions">
+    <form method="post" action="{{ R }}/scan" class="inline">
+      <button class="btn">Scan now</button>
+    </form>
+    <form method="post" action="{{ R }}/rescue-all" class="inline">
+      <button class="btn btn-ok">Rescue queued</button>
+    </form>
+  </div>
+</div>
+
+<nav class="subnav">
+  {% for s in ['queued','skipped','dead','rescued','all'] %}
+    <a href="{{ R }}/discover?status={{ s }}" class="{{ 'active' if status==s else '' }}">
+      {{ s }}{% if s in counts %} ({{ counts[s] }}){% endif %}
+    </a>
+  {% endfor %}
+</nav>
+
+{% if status == 'queued' and not auto_rescue %}
+<p class="hint">Auto-rescue is off — candidates wait here for your review. Turn it on in
+  <a href="{{ R }}/settings">Settings</a> to rescue automatically within budget.</p>
+{% endif %}
+
+<table class="tbl">
+  <thead><tr>
+    <th>Name</th><th>Risk</th><th>Seeds</th><th>Leech</th><th>Dupes</th>
+    <th>Size</th><th>Source</th><th>Legal</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for c in candidates %}
+    <tr>
+      <td class="name" title="{{ c.skip_reason }}">{{ c.name }}</td>
+      <td><span class="pill pill-{{ band(c.endangerment) }}">{{ c.endangerment }}</span></td>
+      <td class="{{ 'bad-text' if c.seeders == 0 else '' }}">{{ c.seeders }}</td>
+      <td>{{ c.leechers }}</td>
+      <td>{{ c.redundancy }}</td>
+      <td>{{ c.size_bytes | bytes }}</td>
+      <td>{{ c.source }}</td>
+      <td>{{ '✓' if c.legal else '—' }}</td>
+      <td class="row-actions">
+        {% if c.status != 'rescued' and c.rescuable %}
+        <form method="post" action="{{ R }}/rescue/{{ c.infohash }}" class="inline">
+          <button class="btn btn-xs">Rescue</button>
+        </form>
+        {% endif %}
+        {% if c.status == 'queued' %}
+        <form method="post" action="{{ R }}/candidate/{{ c.infohash }}/skip" class="inline">
+          <button class="btn btn-xs btn-ghost">Skip</button>
+        </form>
+        {% endif %}
+        {% if c.status == 'rescued' %}<span class="tag tag-ok">rescued</span>{% endif %}
+        {% if not c.rescuable %}<span class="tag tag-bad">truly dead</span>{% endif %}
+        {% if c.status == 'dead' or not c.rescuable %}
+        <form method="post" action="{{ R }}/candidate/{{ c.infohash }}/find-body" class="inline" title="Search indexers for a downloadable copy of the same content">
+          <button class="btn btn-xs btn-ghost">find a body</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="empty">Nothing here. Try “Scan now”.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<section class="panel">
+  <div class="panel-head"><h2>Manual watchlist</h2></div>
+  <p class="hint">Paste a magnet link, a .torrent URL, or a 40-character infohash to rescue something specific.</p>
+  <form method="post" action="{{ R }}/watch/add" class="row-form">
+    <input type="text" name="value" placeholder="magnet:?xt=urn:btih:… or https://…/file.torrent" required>
+    <label class="chk"><input type="checkbox" name="legal" value="on"> I confirm this is legal</label>
+    <button class="btn">Add</button>
+  </form>
+  {% if watchlist %}
+  <ul class="watchlist">
+    {% for w in watchlist %}
+    <li>
+      <code>{{ w.value[:80] }}</code>
+      {% if w.legal %}<span class="tag tag-ok">legal</span>{% endif %}
+      <form method="post" action="{{ R }}/watch/remove" class="inline">
+        <input type="hidden" name="value" value="{{ w.value }}">
+        <button class="btn btn-xs btn-ghost">remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{% endblock %}
