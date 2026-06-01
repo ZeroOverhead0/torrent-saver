@@ -17,7 +17,7 @@ BOOL_KEYS = [
     "vpn_required", "vpn_killswitch", "harden_on_start", "drop_suspicious_trackers",
     "require_recoverable",
     "deathwatch_enabled", "reannounce_enabled", "metadata_ark_enabled",
-    "resurrect_search_enabled",
+    "resurrect_search_enabled", "graduate_enabled",
 ]
 
 # Free-text / numeric settings copied straight from the form when present.
@@ -31,6 +31,7 @@ STR_KEYS = [
     "scan_interval_min", "monitor_interval_min", "min_endangerment_to_queue",
     "min_download_history",
     "deathwatch_interval_min", "deathwatch_alert_seeders", "reannounce_interval_min",
+    "graduate_seeders",
     "demand_min_upload_mbps", "demand_max_torrents", "demand_min_seeders",
     "demand_min_leechers", "vpn_check_interval_min",
     "qbit_url", "qbit_username", "qbit_category", "qbit_save_path",

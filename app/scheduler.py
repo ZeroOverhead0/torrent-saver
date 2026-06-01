@@ -56,6 +56,7 @@ async def monitor_loop() -> None:
         try:
             if not config.is_paused():
                 await actions.sync_tracked()
+                await actions.graduate_recovered()   # release fully-recovered torrents first
                 await actions.evict_overflow()
         except Exception as e:  # noqa: BLE001
             notify.error("evict", f"monitor loop error: {e}")

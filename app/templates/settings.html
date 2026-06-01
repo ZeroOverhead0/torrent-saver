@@ -80,10 +80,13 @@
       <b>Metadata ark</b> — save each rescued torrent's .torrent + metadata to disk (the map survives the data)</label>
     <label class="chk"><input type="checkbox" name="resurrect_search_enabled" {{ 'checked' if s.get_bool('resurrect_search_enabled') }}>
       <b>Find-me-a-body</b> — for truly-dead torrents, auto-search indexers for a downloadable twin</label>
+    <label class="chk"><input type="checkbox" name="graduate_enabled" {{ 'checked' if s.get_bool('graduate_enabled') }}>
+      <b>Graduate the recovered</b> — once a rescued torrent's swarm is healthy again, release it (delete + free disk) to make room for the next dying one</label>
     <div class="grid3">
       <label>Death-watch interval (min)<input type="number" name="deathwatch_interval_min" value="{{ s.get_str('deathwatch_interval_min') }}"></label>
       <label>Alert when seeders drop to ≤<input type="number" name="deathwatch_alert_seeders" value="{{ s.get_str('deathwatch_alert_seeders') }}"></label>
       <label>Re-announce interval (min)<input type="number" name="reannounce_interval_min" value="{{ s.get_str('reannounce_interval_min') }}"></label>
+      <label>Graduate at ≥ N seeders<input type="number" name="graduate_seeders" value="{{ s.get_str('graduate_seeders') }}"></label>
     </div>
   </fieldset>
 

@@ -396,6 +396,67 @@ async def evict_overflow() -> dict:
     return {"ok": True, "evicted": evicted}
 
 
+def graduation_victims(tracked: list, threshold: int) -> list:
+    """Pure selection: which tracked torrents have recovered enough to release.
+
+    A torrent graduates when it is a fully-downloaded rescue whose live seeder
+    count has climbed to ``threshold`` or more — the swarm is healthy again, so
+    our copy is redundant. Demand-mode seeds and partially-downloaded copies are
+    left alone.
+    """
+    return [
+        t for t in tracked
+        if (getattr(t, "mode", "rescue") or "rescue") == "rescue"
+        and (getattr(t, "progress", 0.0) or 0.0) >= 1.0   # only release a copy we fully rescued
+        and (getattr(t, "seeders", 0) or 0) >= threshold   # swarm is healthy again
+    ]
+
+
+async def graduate_recovered() -> dict:
+    """Release torrents whose swarm has fully recovered.
+
+    Once a rescued torrent climbs back to ``graduate_seeders`` healthy seeders it
+    no longer needs us — others now hold it, so our job is done. We delete it (and
+    its data) from qBittorrent to free the slot and the disk for the next dying
+    torrent. The metadata ark saved at rescue time keeps the map, so a graduated
+    torrent stays resurrectable if its swarm dies again later. Unlike eviction,
+    this runs proactively — regardless of the disk budget.
+    """
+    if not config.get_bool("graduate_enabled"):
+        return {"ok": True, "graduated": 0}
+    threshold = config.get_int("graduate_seeders", 10)
+    victims = graduation_victims(live_tracked(), threshold)
+    if not victims:
+        return {"ok": True, "graduated": 0}
+
+    client = get_client()
+    try:
+        if not await client.available():
+            return {"ok": False, "error": "qBittorrent unreachable"}
+    except QBitError as e:
+        return {"ok": False, "error": str(e)}
+
+    now = time.time()
+    graduated = 0
+    for t in victims:
+        reason = f"graduated ({t.seeders} seeders) — swarm healthy, released to make room"
+        try:
+            if await client.delete([t.infohash], delete_files=True):
+                with get_db() as db:
+                    db.execute(
+                        "UPDATE tracked SET evicted_at=?, evict_reason=? WHERE infohash=?",
+                        (now, reason, t.infohash))
+                    db.execute(
+                        "UPDATE candidates SET status='graduated' WHERE infohash=?",
+                        (t.infohash,))
+                notify.decision("graduate",
+                                f"released {t.name[:70]}: {reason}", infohash=t.infohash)
+                graduated += 1
+        except QBitError:
+            break
+    return {"ok": True, "graduated": graduated}
+
+
 # --------------------------------------------------------------------------- #
 # Death-watch — re-scrape known torrents, catch ones sliding toward death
 # --------------------------------------------------------------------------- #

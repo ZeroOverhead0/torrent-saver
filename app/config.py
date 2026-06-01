@@ -164,6 +164,10 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "metadata_ark_enabled": "1",         # save .torrent + metadata to disk so the map survives the data
     "resurrect_search_enabled": "0",     # for truly-dead torrents, search indexers for a downloadable twin
 
+    # Graduation — let a rescued torrent go once its swarm has fully recovered
+    "graduate_enabled": "1",             # release (delete + free disk) torrents the swarm no longer needs us for
+    "graduate_seeders": "10",            # graduate when live seeders climb to >= this many
+
     # Hardening
     "harden_on_start": "1",              # apply qBit lockdown prefs on startup
     "disable_dht_for_private": "1",

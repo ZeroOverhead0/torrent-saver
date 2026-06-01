@@ -60,7 +60,12 @@ class QBittorrentClient:
             if resp.status_code == 403:
                 raise QBitAuthError("qBittorrent refused login (IP banned — too many attempts)")
             text = (resp.text or "").strip()
-            if resp.status_code != 200 or text.lower() != "ok.":
+            # Classic qBittorrent returns 200 "Ok." with a session cookie. qBittorrent
+            # v5 with WebUI\LocalHostAuth=false (loopback auth bypass) instead returns
+            # 204 No Content with a QBT_SID cookie and an empty body — also a success.
+            # A wrong password returns 200 "Fails." with no cookie, which still fails.
+            authed = any("SID" in name for name in resp.cookies.keys())
+            if not (resp.is_success and (text.lower() == "ok." or authed)):
                 raise QBitAuthError("qBittorrent login failed — check username/password")
             self._logged_in = True
 
@@ -199,7 +204,21 @@ class QBittorrentClient:
                      for name, blob in torrent_files]
 
         resp = await self._post("/api/v2/torrents/add", data=data, files=files)
-        ok = resp.status_code == 200 and (resp.text or "").strip().lower() in ("ok.", "")
+        text = (resp.text or "").strip()
+        ok = False
+        if resp.is_success:
+            if text.lower() in ("ok.", ""):
+                ok = True                       # classic builds: 200 "Ok." (or empty body)
+            else:
+                # qBittorrent v5 returns 202 Accepted + a JSON summary, e.g.
+                #   {"added_torrent_ids":[...],"failure_count":0,"pending_count":1,"success_count":0}
+                # A URL add is fetched asynchronously (pending_count), so treat the
+                # response as accepted unless qBittorrent reports an outright failure.
+                try:
+                    info = json.loads(text)
+                    ok = int(info.get("failure_count", 0)) == 0
+                except (ValueError, TypeError, AttributeError):
+                    ok = True                   # 2xx with an unrecognized body — assume accepted
         if not ok:
             log.warning("qbit add failed: %s %s", resp.status_code, resp.text[:200])
         return ok
