@@ -47,8 +47,18 @@ class QBittorrentClient:
     # ------------------------------------------------------------------ #
     # Auth + low-level request
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _ok(resp) -> bool:
+        """qBittorrent action endpoints classically answered 200 "Ok."; v5 may
+        reply with other 2xx codes (202 Accepted, 204 No Content). Treat any 2xx
+        as success so a version bump can't silently turn a working call into a
+        reported failure (the bug class that already broke login + add)."""
+        return resp.is_success
+
     async def login(self) -> None:
         async with self._lock:
+            if self._logged_in:
+                return                          # another coroutine logged in while we waited
             try:
                 resp = await self._client.post(
                     "/api/v2/auth/login",
@@ -105,14 +115,20 @@ class QBittorrentClient:
                 self._api_major = 4
         return self._api_major
 
-    async def available(self) -> bool:
+    async def health(self) -> str:
+        """'ok' | 'auth' | 'down' — distinguishes a bad WebUI password from
+        qBittorrent being unreachable, so the UI can give the right advice
+        instead of blaming connectivity for a wrong password."""
         try:
             await self.version()
-            return True
-        except QBitError:
-            return False
+            return "ok"
+        except QBitAuthError:
+            return "auth"
         except Exception:
-            return False
+            return "down"
+
+    async def available(self) -> bool:
+        return await self.health() == "ok"
 
     async def get_preferences(self) -> dict:
         resp = await self._get("/api/v2/app/preferences")
@@ -121,7 +137,7 @@ class QBittorrentClient:
     async def set_preferences(self, prefs: dict) -> bool:
         resp = await self._post("/api/v2/app/setPreferences",
                                 data={"json": json.dumps(prefs)})
-        return resp.status_code == 200
+        return self._ok(resp)
 
     async def transfer_info(self) -> dict:
         resp = await self._get("/api/v2/transfer/info")
@@ -228,48 +244,52 @@ class QBittorrentClient:
             "hashes": "|".join(h.lower() for h in hashes),
             "deleteFiles": "true" if delete_files else "false",
         })
-        return resp.status_code == 200
+        return self._ok(resp)
 
     # ------------------------------------------------------------------ #
     # Limits / categories / tags
     # ------------------------------------------------------------------ #
     async def set_share_limits(self, hashes: list, *, ratio_limit: float = -1,
                                seeding_time_limit: int = -1,
-                               inactive_seeding_time_limit: int = -1) -> bool:
+                               inactive_seeding_time_limit: int = -1,
+                               share_limit_action: int = -1) -> bool:
         resp = await self._post("/api/v2/torrents/setShareLimits", data={
             "hashes": "|".join(h.lower() for h in hashes),
             "ratioLimit": str(ratio_limit),
             "seedingTimeLimit": str(seeding_time_limit),
             "inactiveSeedingTimeLimit": str(inactive_seeding_time_limit),
+            # qBittorrent v5 made this a REQUIRED param (400 "Missing required
+            # parameters: shareLimitAction" without it). -1 = use the global action.
+            "shareLimitAction": str(share_limit_action),
         })
-        return resp.status_code == 200
+        return self._ok(resp)
 
     async def set_upload_limit(self, hashes: list, limit_bytes: int) -> bool:
         resp = await self._post("/api/v2/torrents/setUploadLimit", data={
             "hashes": "|".join(h.lower() for h in hashes),
             "limit": str(limit_bytes),
         })
-        return resp.status_code == 200
+        return self._ok(resp)
 
     async def create_category(self, name: str, save_path: str = "") -> bool:
         resp = await self._post("/api/v2/torrents/createCategory",
                                 data={"category": name, "savePath": save_path})
-        # 409 simply means it already exists.
-        return resp.status_code in (200, 409)
+        # Any 2xx is success; 409 simply means it already exists.
+        return resp.is_success or resp.status_code == 409
 
     async def set_category(self, hashes: list, category: str) -> bool:
         resp = await self._post("/api/v2/torrents/setCategory", data={
             "hashes": "|".join(h.lower() for h in hashes),
             "category": category,
         })
-        return resp.status_code == 200
+        return self._ok(resp)
 
     async def add_tags(self, hashes: list, tags: str) -> bool:
         resp = await self._post("/api/v2/torrents/addTags", data={
             "hashes": "|".join(h.lower() for h in hashes),
             "tags": tags,
         })
-        return resp.status_code == 200
+        return self._ok(resp)
 
     # ------------------------------------------------------------------ #
     # Pause / resume (v5 renamed pause→stop, resume→start)
@@ -278,18 +298,18 @@ class QBittorrentClient:
         endpoint = "stop" if await self.api_major() >= 5 else "pause"
         resp = await self._post(f"/api/v2/torrents/{endpoint}",
                                 data={"hashes": "|".join(h.lower() for h in hashes)})
-        return resp.status_code == 200
+        return self._ok(resp)
 
     async def resume(self, hashes: list) -> bool:
         endpoint = "start" if await self.api_major() >= 5 else "resume"
         resp = await self._post(f"/api/v2/torrents/{endpoint}",
                                 data={"hashes": "|".join(h.lower() for h in hashes)})
-        return resp.status_code == 200
+        return self._ok(resp)
 
     async def reannounce(self, hashes: list) -> bool:
         resp = await self._post("/api/v2/torrents/reannounce",
                                 data={"hashes": "|".join(h.lower() for h in hashes)})
-        return resp.status_code == 200
+        return self._ok(resp)
 
 
 # --------------------------------------------------------------------------- #

@@ -47,9 +47,12 @@ async def api_status():
     s["auto_rescue"] = config.get_bool("auto_rescue")
     s["demand_seed_enabled"] = config.get_bool("demand_seed_enabled")
     try:
-        s["qbit_available"] = await get_client().available()
+        h = await get_client().health()        # 'ok' | 'auth' | 'down'
+        s["qbit_available"] = (h == "ok")
+        s["qbit_health"] = h
     except QBitError:
         s["qbit_available"] = False
+        s["qbit_health"] = "down"
     return s
 
 

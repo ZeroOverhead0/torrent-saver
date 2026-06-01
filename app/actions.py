@@ -127,9 +127,13 @@ async def enforce_vpn_gate(status) -> int:
     try:
         client = get_client()
         if await client.available():
-            await client.pause(hashes)
-            notify.warn("vpn", f"VPN unsafe — paused {len(hashes)} unrestricted torrent(s)")
-            return len(hashes)
+            if await client.pause(hashes):
+                notify.warn("vpn", f"VPN unsafe — paused {len(hashes)} unrestricted torrent(s)")
+                return len(hashes)
+            # Fail-closed must FAIL LOUDLY: if the pause did not take, we are
+            # potentially leaking. Never report success we did not achieve.
+            notify.error("vpn", f"VPN unsafe but qBittorrent FAILED to pause "
+                                f"{len(hashes)} unrestricted torrent(s) — possible leak")
     except QBitError:
         pass
     return 0
@@ -145,9 +149,9 @@ async def resume_unrestricted() -> int:
     try:
         client = get_client()
         if await client.available():
-            await client.resume(hashes)
-            notify.info("vpn", f"VPN safe — resumed {len(hashes)} unrestricted torrent(s)")
-            return len(hashes)
+            if await client.resume(hashes):
+                notify.info("vpn", f"VPN safe — resumed {len(hashes)} unrestricted torrent(s)")
+                return len(hashes)
     except QBitError:
         pass
     return 0
