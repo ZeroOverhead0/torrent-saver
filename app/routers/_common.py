@@ -3,17 +3,15 @@ from __future__ import annotations
 
 import time
 import urllib.parse
-from pathlib import Path
 
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.db import get_db
+from app.db import get_db, resource_dir
 from app.endangerment import endangerment_band
 
-ROOT = Path(__file__).resolve().parent.parent
-templates = Jinja2Templates(directory=str(ROOT / "templates"))
+templates = Jinja2Templates(directory=str(resource_dir() / "templates"))
 
 
 # --------------------------------------------------------------------------- #

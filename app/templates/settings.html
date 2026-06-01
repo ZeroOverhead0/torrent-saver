@@ -112,7 +112,9 @@
       <label>Category<input type="text" name="qbit_category" value="{{ s.get_str('qbit_category') }}"></label>
       <label>Save path (blank = qBittorrent default)<input type="text" name="qbit_save_path" value="{{ s.get_str('qbit_save_path') }}"></label>
     </div>
+    <button class="btn btn-ghost" formaction="{{ R }}/settings/qbit-detect" formmethod="post">Auto-detect</button>
     <button class="btn btn-ghost" formaction="{{ R }}/settings/qbit-test" formmethod="post">Test connection</button>
+    <p class="hint">New here? Click <b>Auto-detect</b> to find a running qBittorrent automatically.</p>
   </fieldset>
 
   <button class="btn btn-ok btn-lg">Save settings</button>

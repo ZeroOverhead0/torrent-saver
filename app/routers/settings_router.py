@@ -81,3 +81,29 @@ async def qbit_test(request: Request):
     except QBitError as e:
         msg = f"qBittorrent connection failed: {e}"
     return redirect(request, "/settings", msg)
+
+
+@router.post("/settings/qbit-detect")
+async def qbit_detect(request: Request):
+    """Find a running qBittorrent on the usual local ports and point at it."""
+    from app import qbit_detect as detector
+    current = config.get_str("qbit_url")
+    found = await detector.detect(extra=[current] if current else None)
+    if not found:
+        return redirect(request, "/settings",
+                        "No qBittorrent found on the usual local ports. Start "
+                        "qBittorrent and enable its Web UI, or enter the URL manually.")
+    if found != current:
+        S.set_settings({"qbit_url": found})
+        invalidate_client()
+    try:
+        health = await get_client().health()
+    except QBitError:
+        health = "down"
+    if health == "ok":
+        msg = f"Found qBittorrent at {found} — connected."
+    elif health == "auth":
+        msg = f"Found qBittorrent at {found} — now set its Web UI password below."
+    else:
+        msg = f"Found qBittorrent at {found}, but it isn't answering the API yet."
+    return redirect(request, "/settings", msg)

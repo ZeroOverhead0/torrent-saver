@@ -7,6 +7,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Build artifacts (PyInstaller / setuptools)
+build/
+dist/
+
 # Runtime data (DBs, downloaded .torrent files, logs)
 data/
 logs/

@@ -41,36 +41,60 @@ through its Web API and runs as a clean little web app.
 
 ## 🚀 Quick start
 
-### Option A — Docker (app + qBittorrent bundled)
+**Already running qBittorrent?** Any option below auto-detects it — just click
+**Auto-detect** on the Settings page (or it happens on first launch).
+
+### Option A — Download & run (no Python, no setup)
+
+Grab the binary for your OS from [**Releases**](https://github.com/ZeroOverhead0/torrent-saver/releases),
+then run it:
+
+| OS | Run |
+|----|-----|
+| **Windows** | double-click `torrent-saver.exe` |
+| **macOS** | `./torrent-saver` (right-click → Open the first time) |
+| **Linux** | `chmod +x torrent-saver && ./torrent-saver` |
+
+It opens <http://127.0.0.1:8780> in your browser. Click **Auto-detect** to find
+your qBittorrent. Data is stored in your OS's app-data dir (no clutter next to
+the binary).
+
+### Option B — pipx / pip (you have Python ≥ 3.9)
+
+```bash
+pipx install torrent-saver     # or: pip install torrent-saver
+torrent-saver                  # serves http://127.0.0.1:8780, opens a browser
+```
+
+### Option C — Docker (bundles qBittorrent for you)
+
+```bash
+git clone https://github.com/ZeroOverhead0/torrent-saver.git
+cd torrent-saver && docker compose up -d
+```
+
+- Torrent Saver → <http://localhost:8080>, bundled qBittorrent → <http://localhost:8081>
+  (first-run password in `docker compose logs qbittorrent`).
+
+### Option D — From source
 
 ```bash
 git clone https://github.com/ZeroOverhead0/torrent-saver.git
 cd torrent-saver
-docker compose up -d
+./install.sh && ./run.sh       # or: pip install -e . && torrent-saver
 ```
 
-- Torrent Saver → <http://localhost:8080>
-- Bundled qBittorrent Web UI → <http://localhost:8081> (first-run password is in
-  `docker compose logs qbittorrent`)
+### Option E — Claude dashboard hub
 
-Set the qBittorrent password in Torrent Saver → **Settings**, then hit **Test
-connection**.
+Wired in via `dashboard/services.py` (port **18780**), reverse-proxied at
+**`/torrentsaver`**. Run `./install.sh` once and restart the hub.
 
-### Option B — Standalone (connect to your existing qBittorrent)
+### Build the binary yourself
 
 ```bash
-git clone https://github.com/ZeroOverhead0/torrent-saver.git
-cd torrent-saver
-./install.sh          # creates .venv, installs deps, inits the DB
-./run.sh              # serves on http://127.0.0.1:18780
+pip install -e ".[build]"
+pyinstaller torrent-saver.spec --clean --noconfirm   # → dist/torrent-saver
 ```
-
-Open Settings, point it at your qBittorrent Web UI URL + credentials, done.
-
-### Option C — Claude dashboard hub
-
-Already wired in. It registers in `dashboard/services.py` (port **18780**) and is
-reverse-proxied at **`/torrentsaver`**. Run `./install.sh` once and restart the hub.
 
 ## ⚙️ How it works
 

@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.db import APP_DIR, init_db
+from app.db import APP_DIR, init_db, resource_dir
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -106,6 +106,12 @@ def _apply_toml(data: dict, S) -> None:
 # --------------------------------------------------------------------------- #
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialise the DB + seed first-run config at startup rather than at import
+    # time, so importing the package (pip install, PyInstaller analysis, tests)
+    # has no filesystem side effects.
+    init_db()
+    _bootstrap()
+
     tasks: list = []
 
     def _spawn(modpath: str, fn: str) -> None:
@@ -122,6 +128,26 @@ async def lifespan(app: FastAPI):
     _spawn("app.scheduler", "demand_loop")
     _spawn("app.scheduler", "deathwatch_loop")
     _spawn("app.scheduler", "reannounce_loop")
+
+    async def _autodetect_qbit() -> None:
+        # One-shot: if qBittorrent isn't reachable with the current URL, probe the
+        # usual local ports and point at whatever's running. No-op (one cheap
+        # version check) when already connected, so it's free on the live install.
+        try:
+            from app import config, qbit_detect
+            from app import settings as S
+            from app.qbittorrent import get_client, invalidate_client
+            if await get_client().available():
+                return
+            found = await qbit_detect.detect(extra=[config.get_str("qbit_url")])
+            if found and found != config.get_str("qbit_url"):
+                S.set_setting("qbit_url", found)
+                invalidate_client()
+                log.info("Auto-detected qBittorrent at %s", found)
+        except Exception:  # noqa: BLE001
+            pass
+    tasks.append(asyncio.create_task(_autodetect_qbit()))
+
     log.info("Torrent Saver %s started — %d background task(s)", __version__, len(tasks))
     try:
         yield
@@ -136,13 +162,11 @@ async def lifespan(app: FastAPI):
 # --------------------------------------------------------------------------- #
 # App
 # --------------------------------------------------------------------------- #
-init_db()
-_bootstrap()
-
 app = FastAPI(title="Torrent Saver", version=__version__, lifespan=lifespan)
 
-STATIC_DIR = APP_DIR / "static"
-STATIC_DIR.mkdir(parents=True, exist_ok=True)
+STATIC_DIR = resource_dir() / "static"
+with contextlib.suppress(OSError):
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 from app.routers import api, discover, home, settings_router, sources_router, torrents, vpn_router  # noqa: E402

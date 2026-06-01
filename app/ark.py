@@ -14,9 +14,9 @@ import urllib.request
 from pathlib import Path
 from typing import List, Optional
 
-from app.db import ROOT
+from app.db import DATA_DIR
 
-ARK_DIR = ROOT / "data" / "ark"
+ARK_DIR = DATA_DIR / "ark"
 
 
 def _dir_for(infohash: str) -> Path:

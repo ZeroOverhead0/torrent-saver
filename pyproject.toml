@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torrent-saver"
+version = "1.0.0"
+description = "Rescue dying torrents by downloading and re-seeding them, within a machine budget, behind a VPN kill-switch."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "ZeroOverhead0" }]
+keywords = ["bittorrent", "qbittorrent", "preservation", "seeding", "archive"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Communications :: File Sharing",
+]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "httpx>=0.26",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+build = ["pyinstaller>=6"]
+
+[project.urls]
+Homepage = "https://github.com/ZeroOverhead0/torrent-saver"
+Source = "https://github.com/ZeroOverhead0/torrent-saver"
+
+# `torrent-saver` launches the web UI standalone (see app/cli.py).
+[project.scripts]
+torrent-saver = "app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["templates/*", "templates/**/*", "static/*", "static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

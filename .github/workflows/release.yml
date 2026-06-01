@@ -1,0 +1,52 @@
+name: Build binaries
+
+# Build a single-file Torrent Saver binary for Windows, macOS and Linux.
+# Triggers on a version tag (v1.2.3) and attaches the binaries to the GitHub
+# Release; also runnable on demand from the Actions tab.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: torrent-saver-linux
+          - os: macos-latest
+            asset: torrent-saver-macos
+          - os: windows-latest
+            asset: torrent-saver-windows.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[build]"
+      - name: Build
+        run: pyinstaller torrent-saver.spec --clean --noconfirm
+      - name: Rename binary
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv dist/torrent-saver.exe "dist/${{ matrix.asset }}"
+          else
+            mv dist/torrent-saver "dist/${{ matrix.asset }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.asset }}

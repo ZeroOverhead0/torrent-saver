@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,7 +18,48 @@ from typing import Iterator
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
-DB_PATH = Path(os.environ.get("TORRENTSAVER_DB", str(ROOT / "data" / "torrents.db")))
+
+
+def _resolve_data_dir() -> Path:
+    """Where mutable state (DB, ark, logs) lives.
+
+    Resolution order is chosen so an existing in-tree install is NEVER moved,
+    while a fresh pip / PyInstaller install lands in the right per-OS place:
+      1. ``TORRENTSAVER_DATA`` env override.
+      2. An existing in-tree ``data/`` dir (dev checkout + the Claude hub spawn).
+      3. ``platformdirs`` user-data dir (``torrent-saver``) for packaged installs.
+    """
+    env = os.environ.get("TORRENTSAVER_DATA")
+    if env:
+        return Path(env)
+    in_tree = ROOT / "data"
+    if in_tree.is_dir():
+        return in_tree
+    try:
+        from platformdirs import user_data_dir
+        return Path(user_data_dir("torrent-saver", appauthor=False))
+    except Exception:
+        # Soft fallback when platformdirs isn't installed yet.
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share")
+        return Path(base) / "torrent-saver"
+
+
+DATA_DIR = _resolve_data_dir()
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
+DB_PATH = Path(os.environ.get("TORRENTSAVER_DB", str(DATA_DIR / "torrents.db")))
+
+
+def resource_dir() -> Path:
+    """Directory holding the package's read-only resources (templates, static).
+
+    Under PyInstaller these are unpacked to ``sys._MEIPASS/app``; in a normal
+    source/pip layout they sit next to this module (``app/``)."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "app"
+    return APP_DIR
 
 
 # --------------------------------------------------------------------------- #
