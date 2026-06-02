@@ -78,7 +78,7 @@ async def run_demand_seed() -> dict:
     for c in candidates:
         if c.infohash and c.infohash in existing:
             continue
-        allowed, why = _seeding_allowed(vpn_status, c.legal)
+        allowed, why = _seeding_allowed(vpn_status, c.legal, c.source)
         if not allowed:
             notify.warn("seed", f"demand-seed held: {why}")
             break

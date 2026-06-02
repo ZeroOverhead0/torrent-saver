@@ -18,10 +18,15 @@ services:
     container_name: torrentsaver
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # Loopback-only by default. To expose on a LAN you must do BOTH: drop the
+      # "127.0.0.1:" prefix AND set TORRENTSAVER_PASSWORD below (the app refuses
+      # to serve off-box without a password).
+      - "127.0.0.1:8080:8080"
     environment:
       ROOT_PATH: ""        # served at root in standalone Docker
       TORRENTSAVER_DB: /data/torrents.db
+      HOST: 0.0.0.0        # container binds wide internally → the access gate engages
+      # TORRENTSAVER_PASSWORD: choose-a-strong-password   # REQUIRED before LAN exposure
       QBIT_URL: http://qbittorrent:8080
       QBIT_USERNAME: admin
       # QBIT_PASSWORD: set this to the qBittorrent WebUI password (see its logs)
@@ -40,7 +45,7 @@ services:
       TZ: Etc/UTC
       WEBUI_PORT: 8080
     ports:
-      - "8081:8080"        # qBittorrent WebUI on host :8081
+      - "127.0.0.1:8081:8080"  # qBittorrent WebUI on host :8081 (loopback only)
       - "6881:6881"        # BitTorrent TCP
       - "6881:6881/udp"    # BitTorrent UDP
     volumes:

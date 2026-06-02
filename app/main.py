@@ -11,12 +11,16 @@ import asyncio
 import contextlib
 import logging
 import os
+import secrets
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
-from app import __version__
+from app import __version__, auth
 from app.db import APP_DIR, init_db, resource_dir
 
 logging.basicConfig(level=logging.INFO,
@@ -112,6 +116,17 @@ async def lifespan(app: FastAPI):
     init_db()
     _bootstrap()
 
+    # Access gate: engage a password ONLY when the server is reachable off-box
+    # (Docker's 0.0.0.0 publish, or --host on a LAN/public IP). Inert on loopback
+    # — the Claude hub reverse-proxy and a local 127.0.0.1 user are unaffected.
+    # Must run AFTER init_db(): the secrets table doesn't exist before it.
+    bind = os.environ.get("TORRENTSAVER_BIND") or os.environ.get("HOST") or "127.0.0.1"
+    app.state.access_exposed = auth.bound_offbox(bind)
+    app.state.access_pw = auth.ensure_access_secret() if app.state.access_exposed else ""
+    app.state.access_token = secrets.token_urlsafe(24) if app.state.access_exposed else ""
+    if app.state.access_exposed:
+        log.warning("Access gate ENABLED — bound to %s (reachable off-box).", bind)
+
     tasks: list = []
 
     def _spawn(modpath: str, fn: str) -> None:
@@ -163,6 +178,64 @@ async def lifespan(app: FastAPI):
 # App
 # --------------------------------------------------------------------------- #
 app = FastAPI(title="Torrent Saver", version=__version__, lifespan=lifespan)
+
+
+class AccessGate(BaseHTTPMiddleware):
+    """Require the access password when exposed off-box; otherwise transparent.
+
+    Defense-in-depth: gate on BOTH the startup bind (app.state.access_exposed)
+    AND the real socket peer — a connection from a loopback client (the hub, the
+    local user) is always allowed even on a deliberately-exposed box. We trust
+    request.client.host (the real peer), never a spoofable X-Forwarded-For."""
+
+    async def dispatch(self, request: Request, call_next):
+        st = request.app.state
+        if not getattr(st, "access_exposed", False):
+            return await call_next(request)
+        peer = request.client.host if request.client else ""
+        if auth.is_loopback(peer):
+            return await call_next(request)
+        root = request.scope.get("root_path", "") or ""
+        path = request.url.path
+        if path.startswith(root + "/static") or path == root + "/login":
+            return await call_next(request)
+        cookie = request.cookies.get("ts_session", "")
+        if cookie and st.access_token and secrets.compare_digest(cookie, st.access_token):
+            return await call_next(request)
+        if auth.basic_ok(request.headers.get("Authorization", ""), st.access_pw):
+            return await call_next(request)
+        return Response("Authentication required.", status_code=401,
+                        headers={"WWW-Authenticate": 'Basic realm="Torrent Saver"'})
+
+
+app.add_middleware(AccessGate)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request):
+    root = request.scope.get("root_path", "") or ""
+    return (
+        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>Sign in · Torrent Saver</title>"
+        "<form method=post action='" + root + "/login' "
+        "style='max-width:320px;margin:14vh auto;font-family:system-ui;text-align:center'>"
+        "<h2>Torrent Saver</h2><p>Enter the access password (user: <b>admin</b>).</p>"
+        "<input type=password name=password autofocus "
+        "style='width:100%;padding:.6em;margin:.5em 0;box-sizing:border-box'>"
+        "<button style='padding:.6em 1.4em'>Sign in</button></form>")
+
+
+@app.post("/login")
+async def login_submit(request: Request, password: str = Form("")):
+    st = request.app.state
+    root = request.scope.get("root_path", "") or ""
+    if getattr(st, "access_exposed", False) and st.access_pw and \
+            secrets.compare_digest(password, st.access_pw):
+        resp = RedirectResponse(root + "/", status_code=303)
+        resp.set_cookie("ts_session", st.access_token, httponly=True, samesite="strict")
+        return resp
+    return RedirectResponse(root + "/login", status_code=303)
+
 
 STATIC_DIR = resource_dir() / "static"
 with contextlib.suppress(OSError):

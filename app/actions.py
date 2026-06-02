@@ -157,10 +157,17 @@ async def resume_unrestricted() -> int:
     return 0
 
 
-def _seeding_allowed(status, candidate_legal: bool) -> tuple:
+# Only sources whose content is intrinsically legal (class-level legal=True) may
+# skip the VPN. A per-row 'legal' flag — e.g. Prowlarr's prowlarr_trust_legal —
+# lets results pass the discovery filter but must NOT exempt arbitrary indexer
+# content from the tunnel (that was a full kill-switch bypass).
+_VPN_EXEMPT_SOURCES = {"internet_archive", "linuxtracker", "academic_torrents"}
+
+
+def _seeding_allowed(status, candidate_legal: bool, source: str = "") -> tuple:
     """Decide whether seeding this content is permitted right now."""
-    if candidate_legal:
-        return True, "legal content — VPN not required"
+    if candidate_legal and source in _VPN_EXEMPT_SOURCES:
+        return True, "whitelisted-source legal content — VPN not required"
     if not config.get_bool("vpn_required"):
         return True, "VPN not required by settings"
     if status and status.safe_to_seed:
@@ -257,7 +264,7 @@ async def rescue_candidate(infohash: str, vpn_status=None) -> dict:
 
     if vpn_status is None and not cand.legal:
         vpn_status = await current_vpn_status(persist=False)
-    allowed, why = _seeding_allowed(vpn_status, cand.legal)
+    allowed, why = _seeding_allowed(vpn_status, cand.legal, cand.source)
     if not allowed:
         notify.warn("rescue", f"held {cand.name[:60]}: {why}", infohash=infohash)
         return {"ok": False, "error": why}
@@ -617,10 +624,11 @@ async def reannounce_complete() -> dict:
     if not complete:
         return {"ok": True, "reannounced": 0}
     with get_db() as db:
-        legal_map = {r["infohash"]: bool(r["legal"]) for r in
-                     db.execute("SELECT infohash,legal FROM tracked").fetchall()}
+        legal_map = {r["infohash"]: (bool(r["legal"]), r["source"] or "") for r in
+                     db.execute("SELECT infohash,legal,source FROM tracked").fetchall()}
     # Only announce what's allowed to seed right now (VPN gate for unrestricted).
-    allowed = [h for h in complete if _seeding_allowed(status, legal_map.get(h, False))[0]]
+    allowed = [h for h in complete
+               if _seeding_allowed(status, *legal_map.get(h, (False, "")))[0]]
     if allowed:
         await client.reannounce(allowed)
         notify.info("seed", f"re-announced {len(allowed)} torrent(s) to revive their swarms")

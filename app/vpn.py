@@ -132,23 +132,29 @@ def assess(*, interface: str, iface_ip: str, public_ip: str, baseline_ip: str,
     killswitch = bool(interface and qbit_bound_interface == interface)
 
     leaking = False
+    # Can we actually verify there's no leak? Only with a baseline AND a public IP.
+    leak_check_possible = bool(baseline_ip and public_ip)
     detail_bits = []
     if not connected:
         detail_bits.append("no VPN/tunnel interface detected")
-    if baseline_ip and public_ip:
+    if leak_check_possible:
         if public_ip == baseline_ip:
             leaking = True
             detail_bits.append("public IP equals your baseline ISP IP — traffic is NOT on the VPN")
         else:
             detail_bits.append("public IP differs from baseline (good)")
     elif not baseline_ip:
-        detail_bits.append("set your real ISP IP as the baseline to enable leak detection")
+        detail_bits.append("leak detection DISABLED — set your real ISP IP as the baseline; "
+                           "unrestricted content will NOT seed until then")
+    else:
+        detail_bits.append("leak detection unavailable — could not determine your public IP")
     if interface and not killswitch:
         detail_bits.append(f"qBittorrent not yet bound to {interface} (kill-switch off)")
 
     return VpnStatus(
         connected=connected, interface=interface, public_ip=public_ip,
         killswitch_engaged=killswitch, leaking=leaking,
+        leak_check_possible=leak_check_possible,
         detail="; ".join(detail_bits))
 
 

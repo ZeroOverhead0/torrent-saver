@@ -61,13 +61,17 @@ class VpnStatus:
     public_ip: str = ""
     killswitch_engaged: bool = False    # qBit bound to the VPN interface
     leaking: bool = False               # public IP matches the configured baseline ISP IP
+    leak_check_possible: bool = True    # False when we can't verify a leak (no baseline / no public IP)
     checked_at: float = field(default_factory=time.time)
     detail: str = ""
 
     @property
     def safe_to_seed(self) -> bool:
-        """True only when a VPN is up, the kill-switch is engaged, and no leak."""
-        return self.connected and self.killswitch_engaged and not self.leaking
+        """True only when a VPN is up, the kill-switch is engaged, AND we could
+        actually verify there's no leak. Fails CLOSED: if leak detection can't
+        run (no baseline ISP IP, or no public IP), we never claim it's safe."""
+        return (self.connected and self.killswitch_engaged
+                and self.leak_check_possible and not self.leaking)
 
 
 @dataclass

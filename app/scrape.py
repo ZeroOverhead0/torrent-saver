@@ -24,22 +24,36 @@ UDP_PROTOCOL_ID = 0x41727101980
 DEFAULT_TIMEOUT = 8.0
 
 
-def _host_is_safe(host: Optional[str]) -> bool:
-    """True only if `host` resolves to a public, routable IP.
+def _resolve_safe_ip(host: Optional[str]) -> Optional[str]:
+    """Resolve `host` to a public, routable IP ONCE and return it (or None).
 
-    Blocks SSRF: a crafted magnet/tracker pointing at localhost, a private
-    range, or a hostname that *resolves* to one (DNS-rebinding) must never have
-    a scrape packet sent to it.
+    Blocks SSRF *including DNS rebinding*: callers MUST connect to the returned
+    IP and never re-resolve the hostname, so a name that passes the check can't
+    then rebind to localhost/a private range before the real request goes out.
     """
     if not host:
-        return False
+        return None
     try:
         ip = socket.gethostbyname(host)
         addr = ipaddress.ip_address(ip)
     except (OSError, ValueError):
-        return False
-    return not (addr.is_private or addr.is_loopback or addr.is_link_local
-                or addr.is_reserved or addr.is_multicast or addr.is_unspecified)
+        return None
+    if (addr.is_private or addr.is_loopback or addr.is_link_local
+            or addr.is_reserved or addr.is_multicast or addr.is_unspecified):
+        return None
+    return ip
+
+
+def _host_is_safe(host: Optional[str]) -> bool:
+    """Boolean wrapper around _resolve_safe_ip (magnet-tracker hygiene)."""
+    return _resolve_safe_ip(host) is not None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse 3xx: a redirect could bounce a validated request to a private host."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -90,7 +104,8 @@ def build_magnet(infohash: str, name: str = "", trackers: Optional[list] = None)
 # --------------------------------------------------------------------------- #
 def http_scrape(announce_url: str, infohash_hex: str, timeout: float = DEFAULT_TIMEOUT) -> Optional[dict]:
     parsed = urllib.parse.urlparse(announce_url)
-    if not _host_is_safe(parsed.hostname):
+    ip = _resolve_safe_ip(parsed.hostname)
+    if ip is None:
         return None
     path = parsed.path
     # Scrape is only defined when the last path segment is "announce".
@@ -102,11 +117,17 @@ def http_scrape(announce_url: str, infohash_hex: str, timeout: float = DEFAULT_T
     query = "info_hash=" + urllib.parse.quote_from_bytes(raw, safe="")
     if parsed.query:
         query = parsed.query + "&" + query
+    # Connect to the validated IP literal (never re-resolve), carrying the real
+    # hostname in the Host header for vhost routing. Brackets for IPv6.
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    ip_host = f"[{ip}]" if ":" in ip else ip
     scrape_url = urllib.parse.urlunparse(
-        (parsed.scheme, parsed.netloc, scrape_path, "", query, ""))
+        (parsed.scheme, f"{ip_host}:{port}", scrape_path, "", query, ""))
     try:
-        req = urllib.request.Request(scrape_url, headers={"User-Agent": "TorrentSaver/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        req = urllib.request.Request(scrape_url, headers={
+            "User-Agent": "TorrentSaver/1.0", "Host": parsed.netloc})
+        # Custom opener refuses redirects (no rebind via a 3xx into a private host).
+        with urllib.request.build_opener(_NoRedirect()).open(req, timeout=timeout) as resp:
             body = resp.read()
         data = bencode.decode(body)
         files = data.get(b"files", {})
@@ -132,13 +153,15 @@ def udp_scrape(announce_url: str, infohash_hex: str, timeout: float = DEFAULT_TI
     parsed = urllib.parse.urlparse(announce_url)
     if not parsed.hostname or not parsed.port:
         return None
-    if not _host_is_safe(parsed.hostname):
+    ip = _resolve_safe_ip(parsed.hostname)
+    if ip is None:
         return None
     raw = bytes.fromhex(infohash_hex)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(timeout)
     try:
-        addr = (socket.gethostbyname(parsed.hostname), parsed.port)
+        # Send to the validated IP — never a second gethostbyname (rebind window).
+        addr = (ip, parsed.port)
         # --- connect handshake ---
         tid = struct.unpack(">I", os.urandom(4))[0]
         req = struct.pack(">QII", UDP_PROTOCOL_ID, 0, tid)

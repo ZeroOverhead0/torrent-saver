@@ -44,6 +44,9 @@ def main(argv=None) -> None:
 
     print(f"\n  Torrent Saver — open {url}\n  (press Ctrl-C to stop)\n")
 
+    # Tell the access gate what we bound to (it requires a password off-box).
+    os.environ["TORRENTSAVER_BIND"] = args.host
+
     # Import lazily so `--help` is instant and PyInstaller analysis is clean.
     import uvicorn
     from app.main import app as asgi_app

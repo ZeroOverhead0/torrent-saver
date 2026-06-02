@@ -138,7 +138,33 @@ can't send a byte.
 that qBittorrent is bound to it. It can't prove from the outside that no single peer
 connection ever escaped — so it errs on the side of refusing to seed. Use a provider
 with a real kill-switch (or the gluetun container in `docker-compose.yml`) for
-defence in depth.
+defence in depth. Leak detection needs a baseline ISP IP; until you set one, it
+**refuses** to seed unrestricted content (legal/whitelisted content is unaffected).
+
+## 🛡️ Security
+
+This is a single-user, local-first tool — by default it listens on `127.0.0.1` only
+and needs no login.
+
+- **Off-box access requires a password.** The moment you bind to a non-loopback
+  address (`--host 0.0.0.0`, a LAN IP, or Docker's published port), an access gate
+  turns on: sign in as `admin` with the password from `TORRENTSAVER_PASSWORD` (or the
+  one auto-generated and printed to the log on first exposed start). Connections from
+  loopback (a local user, or a reverse proxy on the same box) are always let through.
+- **Docker publishes to `127.0.0.1` only** by default. Exposing it on a LAN is a
+  deliberate two-step: drop the `127.0.0.1:` prefix in `docker-compose.yml` **and** set
+  `TORRENTSAVER_PASSWORD`.
+- **Secrets** (qBittorrent password, Prowlarr key, the access password) live **plaintext**
+  in the SQLite DB (`data/torrents.db`, or your OS app-data dir), which is created
+  `0600` (owner-only). Don't run this as a shared/multi-tenant service and don't commit
+  `data/` or a `config.toml` containing credentials.
+- **Prowlarr** results are *never* exempt from the VPN gate even with `prowlarr_trust_legal`
+  on — only the built-in legal sources (Internet Archive, LinuxTracker, Academic
+  Torrents) may seed without a tunnel.
+- **Tracker scraping** validates + pins the resolved IP (no DNS-rebinding) and refuses
+  redirects. *Fast-follow:* the same hardening is still owed to the other outbound
+  fetchers (scanner/resurrect/seeder/Prowlarr), and a fully hashed dependency lockfile
+  is planned.
 
 ## ⚖️ Legal
 
