@@ -25,6 +25,8 @@ class Candidate:
     endangerment: float = 0.0
     redundancy: int = 0
     rescuable: bool = True              # False when seeders == 0 (undownloadable)
+    worth: Optional[int] = None         # 0-100 LLM "worth rescuing" score; None = not judged
+    worth_reason: str = ""              # short LLM rationale for the worth score
     raw: dict = field(default_factory=dict)
 
     def normalised_hash(self) -> str:

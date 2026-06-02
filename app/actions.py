@@ -12,7 +12,7 @@ import shutil
 import time
 from typing import Optional
 
-from app import ark, config, curator, decorrelate, eviction, hardening, notify, resurrect, vpn
+from app import ark, config, curator, curator_ai, decorrelate, eviction, hardening, notify, resurrect, vpn
 from app.db import DB_PATH, get_db
 from app.endangerment import endangerment_score, evaluate_graduation, is_rescuable
 from app.models import Candidate, TrackedTorrent
@@ -39,7 +39,9 @@ def _candidate_from_row(r) -> Candidate:
         category=r["category"] or "", legal=bool(r["legal"]),
         trackers=_json_col(r, "trackers"), webseeds=_json_col(r, "webseeds"),
         endangerment=r["endangerment"] or 0.0, redundancy=r["redundancy"] or 0,
-        rescuable=bool(r["rescuable"]))
+        rescuable=bool(r["rescuable"]),
+        worth=(r["worth"] if "worth" in r.keys() else None),
+        worth_reason=((r["worth_reason"] if "worth_reason" in r.keys() else "") or ""))
 
 
 def _tracked_from_row(r) -> TrackedTorrent:
@@ -276,12 +278,14 @@ async def rescue_candidate(infohash: str, vpn_status=None) -> dict:
     # trackers, or a scrape failure all fall through and rescue normally (the swarm
     # count stays 0 for webseeds, so they're never wrongly skipped).
     sat = config.get_int("swarm_saturation_seeders", 4)
+    live_seeders_before = None      # swarm size when we joined — powers the "am I helping?" metric
     if sat > 0 and cand.trackers:
         try:
             live = await asyncio.to_thread(scrape_infohash, infohash, cand.trackers, 5.0)
         except Exception:  # noqa: BLE001
             live = None
         live_seeders = int((live or {}).get("seeders", 0) or 0)
+        live_seeders_before = live_seeders
         if live_seeders >= sat:
             with get_db() as db:
                 db.execute(
@@ -321,13 +325,13 @@ async def rescue_candidate(infohash: str, vpn_status=None) -> dict:
         db.execute(
             """INSERT INTO tracked
                  (infohash,name,source,size_bytes,category,legal,mode,seeders,
-                  leechers,endangerment,added_at,last_checked)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                  leechers,endangerment,live_seeders_before,added_at,last_checked)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(infohash) DO UPDATE SET
                  evicted_at=NULL, evict_reason='', mode='rescue'""",
             (infohash, cand.name, cand.source, cand.size_bytes,
              config.get_str("qbit_category"), int(cand.legal), "rescue",
-             cand.seeders, cand.leechers, cand.endangerment, now, now))
+             cand.seeders, cand.leechers, cand.endangerment, live_seeders_before, now, now))
         db.execute("UPDATE candidates SET status='rescued' WHERE infohash=?", (infohash,))
 
     # Metadata ark: save the map so this torrent survives even if its bytes don't.
@@ -367,19 +371,23 @@ def _build_order_key(profile):
         return None
     sharpness = config.get_float("rescue_sampling_sharpness", 1.0)
     max_skip = config.get_float("participation_max_skip", 0.5)
+    weight = config.get_float("ai_curation_blend_weight", 0.5)
     scale = min(1.0, (profile.max_torrents or 25) / 25.0)
 
     def key(c):
         ih = c.normalised_hash()
         e = max(0.0, min(100.0, c.endangerment or 0.0))
+        # AI worth tilts the priority used for ORDER only (gates use raw signals);
+        # no broker / unjudged -> blend() returns endangerment unchanged.
+        pri = curator_ai.blend(e, getattr(c, "worth", None), weight)
         if sampling:
             u = decorrelate.rng("rescue:" + ih).random()       # stable per (install, torrent)
-            w = max(0.1, e) ** sharpness
+            w = max(0.1, pri) ** sharpness
             score = u ** (1.0 / w)                              # Efraimidis–Spirakis weighted draw
         else:
-            score = e / 100.0
+            score = pri / 100.0
         skipped = False
-        if participation and e < 100.0:
+        if participation and e < 100.0:                        # never skip critical (raw endangerment)
             p = max_skip * (1.0 - e / 100.0) * scale
             skipped = decorrelate.rng("participate:" + ih).random() < p
         return (skipped, -score, c.size_bytes or 0)            # non-skipped first, best score first

@@ -107,6 +107,21 @@
   </fieldset>
 
   <fieldset>
+    <legend>AI curation (optional — needs the local LLM broker)</legend>
+    <label class="chk"><input type="checkbox" name="ai_curation_enabled" {{ 'checked' if s.get_bool('ai_curation_enabled') }}>
+      <b>Rank by "worth rescuing"</b> — when a local Ollama broker is reachable, an LLM scores each candidate's archival/irreplaceability value and blends it into rescue priority. No broker = no change. Only re-orders; never changes what's eligible.</label>
+    <div class="grid3">
+      <label>Model<input type="text" name="ai_curation_model" value="{{ s.get_str('ai_curation_model') }}"></label>
+      <label>Blend weight (0–1)<input type="number" step="0.05" name="ai_curation_blend_weight" value="{{ s.get_str('ai_curation_blend_weight') }}"></label>
+      <label>Temperature<input type="number" step="0.1" name="ai_curation_temperature" value="{{ s.get_str('ai_curation_temperature') }}"></label>
+      <label>Max judged / scan<input type="number" name="ai_curation_max_per_scan" value="{{ s.get_str('ai_curation_max_per_scan') }}"></label>
+      <label>Concurrency<input type="number" name="ai_curation_concurrency" value="{{ s.get_str('ai_curation_concurrency') }}"></label>
+      <label>Min endangerment to judge<input type="number" name="ai_curation_min_endangerment" value="{{ s.get_str('ai_curation_min_endangerment') }}"></label>
+      <label>Per-call timeout (s)<input type="number" name="ai_curation_timeout_s" value="{{ s.get_str('ai_curation_timeout_s') }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
     <legend>Demand-seeding — help the network</legend>
     <label class="chk"><input type="checkbox" name="demand_seed_enabled" {{ 'checked' if s.get_bool('demand_seed_enabled') }}>
       <b>Seed the most in-demand torrents.</b> Auto-grabs freshly-released / high-demand

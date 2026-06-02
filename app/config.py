@@ -207,6 +207,19 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "graduate_rearm_seeders": "6",       # hysteresis: re-arm a recovered candidate only below this
     "graduate_stay_probability": "0.10", # rescuer floor: chance an install ANCHORS instead of releasing
 
+    # AI worth-curation (Phase 3) — OPTIONAL. Only acts when the shared ollama
+    # broker is reachable; with no broker the app is byte-identical (worth=None →
+    # ordering falls back to pure endangerment). Re-orders the eligible set toward
+    # irreplaceable content; never opens/closes an eligibility gate.
+    "ai_curation_enabled": "1",          # acts only if the broker is healthy
+    "ai_curation_model": "qwen3.5:9b",
+    "ai_curation_blend_weight": "0.5",   # final_priority = (1-w)*endangerment + w*worth
+    "ai_curation_temperature": "0.4",    # >0 so installs decorrelate (not a fleet-wide re-correlator)
+    "ai_curation_max_per_scan": "25",    # broker calls per scan (cost cap)
+    "ai_curation_concurrency": "2",      # concurrent broker calls
+    "ai_curation_min_endangerment": "20",# don't spend the LLM on near-safe candidates
+    "ai_curation_timeout_s": "8",        # per-call timeout — a tilt, never stall discovery
+
     # Hardening
     "harden_on_start": "1",              # apply qBit lockdown prefs on startup
     "disable_dht_for_private": "1",

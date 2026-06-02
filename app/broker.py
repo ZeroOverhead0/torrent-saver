@@ -82,3 +82,54 @@ def judge_same_content(title_a: str, title_b: str,
     except Exception as e:  # noqa: BLE001
         log.info("broker dedup judge failed: %s", e)
     return None
+
+
+def _extract_json(text: str):
+    """Pull the first {...} object out of an LLM reply (it may wrap it in prose)."""
+    import json
+    import re
+    m = re.search(r"\{.*\}", text or "", re.DOTALL)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def judge_worth(name: str, category: str, source: str, size_bytes: int, legal: bool,
+                *, model: str = "qwen3.5:9b", temperature: float = 0.4,
+                timeout: float = 8.0) -> Optional[tuple]:
+    """Rate how WORTH RESCUING a torrent is (0-100) + a short reason, or None.
+
+    Fed only descriptive metadata — never seeders/endangerment — so worth is an
+    axis orthogonal to "is it dying": archival/irreplaceability value, not
+    popularity. temperature > 0 so independent installs decorrelate instead of
+    ranking identically. Returns None on any failure (caller = 'no opinion')."""
+    broker = _load()
+    if broker is None:
+        return None
+    size_gb = (size_bytes or 0) / (1024 ** 3)
+    prompt = (
+        "Rate how WORTH RESCUING + preserving this torrent is, 0-100, by its "
+        "archival / historical / scientific value and irreplaceability — NOT its "
+        "popularity. High (80-100): irreplaceable primary sources, datasets, gov/"
+        "legal records, abandonware, out-of-print or regional/minority-language "
+        "works, archival footage. Mid (~50): niche but mirrored elsewhere. Low "
+        "(<20): mainstream commercial media, junk, trivially re-downloadable.\n"
+        f"Title: {name}\nCategory: {category or 'unknown'}\nSource: {source}\n"
+        f"Size: {size_gb:.1f} GB\nLegal/whitelisted: {bool(legal)}\n"
+        'Reply with ONLY JSON: {"worth": <int 0-100>, "reason": "<=12 words"}'
+    )
+    try:
+        resp = broker.generate(model, prompt, options={"temperature": temperature},
+                               timeout=timeout)
+        data = _extract_json((resp.get("response") or "").strip())
+        if not data or "worth" not in data:
+            return None
+        worth = max(0, min(100, int(data["worth"])))
+        reason = str(data.get("reason", ""))[:120]
+        return (worth, reason)
+    except Exception as e:  # noqa: BLE001
+        log.info("broker worth judge failed: %s", e)
+        return None

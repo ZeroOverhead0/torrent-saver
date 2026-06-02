@@ -22,12 +22,23 @@ def _stats() -> dict:
         demand = db.execute(
             "SELECT COUNT(*) c FROM tracked WHERE evicted_at IS NULL AND mode='demand'"
         ).fetchone()["c"]
+        anchored = db.execute(
+            "SELECT COUNT(*) c FROM tracked WHERE evicted_at IS NULL AND mode='anchor'"
+        ).fetchone()["c"]
+        # "Am I helping or redundant?" — did we join a genuinely thin swarm?
+        thr = config.get_int("endangered_max_seeders", 5)
+        h = db.execute(
+            "SELECT "
+            "SUM(CASE WHEN live_seeders_before IS NOT NULL AND live_seeders_before < ? THEN 1 ELSE 0 END) helped, "
+            "SUM(CASE WHEN live_seeders_before IS NOT NULL AND live_seeders_before >= ? THEN 1 ELSE 0 END) redundant "
+            "FROM tracked WHERE evicted_at IS NULL", (thr, thr)).fetchone()
         vpn = db.execute("SELECT * FROM vpn_checks ORDER BY ts DESC LIMIT 1").fetchone()
     from app import ark
     profile = config.machine_profile()
     return {
         "queued": queued, "skipped": skipped, "dead": dead, "rescued": rescued,
         "tracked": trow["c"], "library_bytes": trow["b"], "demand": demand,
+        "anchored": anchored, "helped": h["helped"] or 0, "redundant": h["redundant"] or 0,
         "archived": ark.count_ark(),
         "disk_budget_bytes": profile.max_disk_bytes, "profile": profile.key,
         "vpn": dict(vpn) if vpn else {},

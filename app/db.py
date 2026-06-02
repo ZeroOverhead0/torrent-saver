@@ -230,11 +230,15 @@ _MIGRATIONS = {
         ("webseeds", "TEXT DEFAULT '[]'"),
         ("watched", "INTEGER DEFAULT 1"),
         ("archived", "INTEGER DEFAULT 0"),
+        ("worth", "INTEGER"),
+        ("worth_reason", "TEXT DEFAULT ''"),
+        ("worth_model", "TEXT DEFAULT ''"),
     ],
     "tracked": [
         ("swarm_revived_at", "REAL"),
         ("archived", "INTEGER DEFAULT 0"),
         ("graduate_eligible_at", "REAL"),
+        ("live_seeders_before", "INTEGER"),    # swarm size when we joined ("am I helping?")
     ],
 }
 

@@ -17,7 +17,7 @@ from typing import List, Optional
 
 import httpx
 
-from app import bencode, config, dedup, notify
+from app import bencode, config, curator_ai, dedup, notify
 from app.db import get_db
 from app.endangerment import endangerment_score, is_rescuable
 from app.models import Candidate
@@ -122,6 +122,7 @@ def _decide_status(cand: Candidate, *, legal_only: bool, max_seeders: int,
 def _persist(cands: List[Candidate], *, legal_only: bool, max_seeders: int,
              max_redundancy: int, floor: float, min_history: int) -> int:
     now = time.time()
+    model = config.get_str("ai_curation_model", "qwen3.5:9b")
     queued = 0
     with get_db() as db:
         for c in cands:
@@ -138,8 +139,9 @@ def _persist(cands: List[Candidate], *, legal_only: bool, max_seeders: int,
                 INSERT INTO candidates
                   (infohash,name,source,magnet,torrent_url,size_bytes,seeders,
                    leechers,completed,category,legal,endangerment,redundancy,
-                   rescuable,status,skip_reason,trackers,webseeds,first_seen,last_seen)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   rescuable,status,skip_reason,trackers,webseeds,
+                   worth,worth_reason,worth_model,first_seen,last_seen)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(infohash) DO UPDATE SET
                   name=excluded.name,
                   source=excluded.source,
@@ -160,12 +162,18 @@ def _persist(cands: List[Candidate], *, legal_only: bool, max_seeders: int,
                   skip_reason=excluded.skip_reason,
                   trackers=CASE WHEN excluded.trackers!='[]' THEN excluded.trackers ELSE candidates.trackers END,
                   webseeds=CASE WHEN excluded.webseeds!='[]' THEN excluded.webseeds ELSE candidates.webseeds END,
+                  -- keep a cached worth if this scan didn't (re)judge it
+                  worth=COALESCE(excluded.worth, candidates.worth),
+                  worth_reason=CASE WHEN excluded.worth IS NOT NULL THEN excluded.worth_reason ELSE candidates.worth_reason END,
+                  worth_model=CASE WHEN excluded.worth IS NOT NULL THEN excluded.worth_model ELSE candidates.worth_model END,
                   last_seen=excluded.last_seen
                 """,
                 (ih, c.name, c.source, c.magnet, c.torrent_url, c.size_bytes,
                  c.seeders, c.leechers, c.completed, c.category, int(c.legal),
                  c.endangerment, c.redundancy, int(c.rescuable), status, reason,
                  json.dumps(c.trackers or []), json.dumps(c.webseeds or []),
+                 c.worth, (c.worth_reason or ""),
+                 (model if c.worth is not None else ""),
                  now, now),
             )
     return queued
@@ -241,6 +249,9 @@ async def run_scan(per_source_limit: Optional[int] = None) -> dict:
         c.endangerment = endangerment_score(
             c.seeders, c.leechers, completed=c.completed,
             redundancy=c.redundancy, max_seeders_endangered=max_seeders)
+
+    # --- optional AI worth-curation (no-op without a broker) ---------------- #
+    summary["ai_judged"] = await curator_ai.annotate_worth(all_cands)
 
     summary["queued"] = _persist(
         all_cands, legal_only=legal_only, max_seeders=max_seeders,
