@@ -19,10 +19,14 @@ def plan_rescues(candidates: List[Candidate], current_library_bytes: int,
                  max_seeders_endangered: int = 5, min_seeders_to_rescue: int = 1,
                  max_redundancy: int = 2, min_endangerment: float = 35.0,
                  current_torrent_count: int = 0,
-                 already_tracked: set | None = None) -> List[RescueDecision]:
+                 already_tracked: set | None = None,
+                 order_key=None) -> List[RescueDecision]:
     """Return a RescueDecision for every candidate, accepted ones first.
 
     `already_tracked` is a set of infohashes we already seed (skipped silently).
+    `order_key`, when given, replaces the default strict-endangerment ordering —
+    the caller injects a decorrelated sort (per-install sampling + participation)
+    so a fleet of installs spreads across the long tail instead of dogpiling.
     """
     already_tracked = already_tracked or set()
     budget_remaining = max(0, profile.max_disk_bytes - current_library_bytes)
@@ -33,11 +37,12 @@ def plan_rescues(candidates: List[Candidate], current_library_bytes: int,
     running = current_library_bytes
 
     # Sort: most endangered first; for equal risk prefer the smaller torrent so
-    # the budget rescues more distinct content.
-    ordered = sorted(
-        candidates,
-        key=lambda c: (-c.endangerment, c.size_bytes or 0),
-    )
+    # the budget rescues more distinct content. A caller-supplied order_key takes
+    # over to decorrelate selection across the fleet (still slot/budget-capped).
+    if order_key is not None:
+        ordered = sorted(candidates, key=order_key)
+    else:
+        ordered = sorted(candidates, key=lambda c: (-c.endangerment, c.size_bytes or 0))
 
     for c in ordered:
         ih = c.normalised_hash()

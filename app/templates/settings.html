@@ -91,6 +91,22 @@
   </fieldset>
 
   <fieldset>
+    <legend>Fleet coordination (when many people run this)</legend>
+    <label class="chk"><input type="checkbox" name="rescue_sampling" {{ 'checked' if s.get_bool('rescue_sampling') }}>
+      <b>Spread the fleet</b> — pick rescues by endangerment-weighted random order (per-install) instead of always the same top-N, so independent installs cover the long tail instead of dogpiling.</label>
+    <label class="chk"><input type="checkbox" name="participation" {{ 'checked' if s.get_bool('participation') }}>
+      <b>Participation</b> — probabilistically deprioritise some non-critical candidates (others likely cover them). Never skips critical ones; slots still fill.</label>
+    <div class="grid3">
+      <label>Auto-rescue max per cycle<input type="number" name="auto_rescue_max_per_cycle" value="{{ s.get_str('auto_rescue_max_per_cycle') }}"></label>
+      <label>Sampling sharpness<input type="number" step="0.1" name="rescue_sampling_sharpness" value="{{ s.get_str('rescue_sampling_sharpness') }}"></label>
+      <label>Participation max skip (0–1)<input type="number" step="0.05" name="participation_max_skip" value="{{ s.get_str('participation_max_skip') }}"></label>
+      <label>Graduation re-arm seeders<input type="number" name="graduate_rearm_seeders" value="{{ s.get_str('graduate_rearm_seeders') }}"></label>
+      <label>Anchor probability (0–1)<input type="number" step="0.05" name="graduate_stay_probability" value="{{ s.get_str('graduate_stay_probability') }}"></label>
+    </div>
+    <p class="hint">"Anchor" = a small chance an install keeps seeding a graduated torrent so a fleet releasing at once can't drain the swarm to zero.</p>
+  </fieldset>
+
+  <fieldset>
     <legend>Demand-seeding — help the network</legend>
     <label class="chk"><input type="checkbox" name="demand_seed_enabled" {{ 'checked' if s.get_bool('demand_seed_enabled') }}>
       <b>Seed the most in-demand torrents.</b> Auto-grabs freshly-released / high-demand

@@ -19,6 +19,7 @@ BOOL_KEYS = [
     "deathwatch_enabled", "reannounce_enabled", "metadata_ark_enabled",
     "resurrect_search_enabled", "graduate_enabled",
     "demand_max_upload", "src_distro_radar_enabled", "demand_legal_only",
+    "rescue_sampling", "participation",
 ]
 
 # Free-text / numeric settings copied straight from the form when present.
@@ -32,7 +33,8 @@ STR_KEYS = [
     "scan_interval_min", "monitor_interval_min", "min_endangerment_to_queue",
     "min_download_history",
     "deathwatch_interval_min", "deathwatch_alert_seeders", "reannounce_interval_min",
-    "graduate_seeders",
+    "graduate_seeders", "graduate_rearm_seeders", "graduate_stay_probability",
+    "rescue_sampling_sharpness", "participation_max_skip", "auto_rescue_max_per_cycle",
     "demand_min_upload_mbps", "demand_max_torrents", "demand_min_seeders",
     "demand_min_leechers", "demand_scan_limit", "distro_radar_torrents",
     "vpn_check_interval_min",

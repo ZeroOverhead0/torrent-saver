@@ -352,6 +352,41 @@ async def rescue_candidate(infohash: str, vpn_status=None) -> dict:
     return {"ok": True}
 
 
+def _build_order_key(profile):
+    """A decorrelated candidate-ordering for plan_rescues, or None when disabled.
+
+    Per-install endangerment-weighted sampling + participation skip so independent
+    installs pick DIFFERENT slices of the same queue (spreading the fleet over the
+    long tail) instead of all dogpiling the strict top-N. Skipped candidates are
+    deprioritised, not dropped, so slots still fill — no coverage loss. Critical
+    candidates (endangerment 100) are never sampled-down or skipped. Randomness is
+    dampened on tiny profiles (scale by max_torrents/25)."""
+    sampling = config.get_bool("rescue_sampling")
+    participation = config.get_bool("participation")
+    if not (sampling or participation):
+        return None
+    sharpness = config.get_float("rescue_sampling_sharpness", 1.0)
+    max_skip = config.get_float("participation_max_skip", 0.5)
+    scale = min(1.0, (profile.max_torrents or 25) / 25.0)
+
+    def key(c):
+        ih = c.normalised_hash()
+        e = max(0.0, min(100.0, c.endangerment or 0.0))
+        if sampling:
+            u = decorrelate.rng("rescue:" + ih).random()       # stable per (install, torrent)
+            w = max(0.1, e) ** sharpness
+            score = u ** (1.0 / w)                              # Efraimidis–Spirakis weighted draw
+        else:
+            score = e / 100.0
+        skipped = False
+        if participation and e < 100.0:
+            p = max_skip * (1.0 - e / 100.0) * scale
+            skipped = decorrelate.rng("participate:" + ih).random() < p
+        return (skipped, -score, c.size_bytes or 0)            # non-skipped first, best score first
+
+    return key
+
+
 async def rescue_queued(max_to_add: Optional[int] = None) -> dict:
     if config.is_paused():
         return {"ok": False, "error": "paused"}
@@ -373,7 +408,8 @@ async def rescue_queued(max_to_add: Optional[int] = None) -> dict:
         max_redundancy=config.get_int("max_redundancy", 2),
         min_endangerment=config.get_float("min_endangerment_to_queue", 35.0),
         current_torrent_count=len(tracked),
-        already_tracked=tracked_infohashes())
+        already_tracked=tracked_infohashes(),
+        order_key=_build_order_key(profile))
 
     accepted = [d for d in decisions if d.rescue]
     if max_to_add:
@@ -521,8 +557,22 @@ async def graduate_recovered() -> dict:
     except QBitError:
         return {"ok": True, "graduated": 0}
 
-    graduated = 0
+    # Rescuer floor: a fraction of installs ANCHOR (keep seeding) instead of
+    # releasing, so a fleet graduating at once never drains the swarm to zero.
+    # Anchors still count against the budget and remain eviction-reclaimable.
+    stay_p = config.get_float("graduate_stay_probability", 0.10)
+    anchors_on = stay_p > 0 and config.machine_profile().key != "potato"
+    graduated = anchored = 0
     for t in releases:
+        if anchors_on and decorrelate.rng("floor:" + t.infohash).random() < stay_p:
+            with get_db() as db:
+                db.execute("UPDATE tracked SET mode='anchor', graduate_eligible_at=NULL "
+                           "WHERE infohash=?", (t.infohash,))
+            notify.info("graduate",
+                        f"anchoring {t.name[:60]} — staying a seed so the swarm can't hit zero",
+                        infohash=t.infohash)
+            anchored += 1
+            continue
         reason = f"graduated ({t.seeders} seeders, sustained) — swarm healthy, released to make room"
         try:
             if await client.delete([t.infohash], delete_files=True):
@@ -538,7 +588,7 @@ async def graduate_recovered() -> dict:
                 graduated += 1
         except QBitError:
             break
-    return {"ok": True, "graduated": graduated}
+    return {"ok": True, "graduated": graduated, "anchored": anchored}
 
 
 # --------------------------------------------------------------------------- #
@@ -552,6 +602,7 @@ async def rescan_watchlist() -> dict:
     require_recoverable = config.get_bool("require_recoverable")
     floor = config.get_float("min_endangerment_to_queue", 35.0)
     alert_at = config.get_int("deathwatch_alert_seeders", 2)
+    rearm = config.get_int("graduate_rearm_seeders", 6)
     with get_db() as db:
         rows = [dict(r) for r in db.execute(
             "SELECT infohash,name,trackers,webseeds,status FROM candidates "
@@ -588,7 +639,12 @@ async def rescan_watchlist() -> dict:
         elif seeders > max_seeders:
             new = "skipped"
         else:
-            new = "queued" if endanger >= floor else "skipped"
+            queue_it = endanger >= floor
+            # Hysteresis: a recovered candidate that was skipped only re-arms once
+            # it drops below the rearm threshold — avoids flapping at the boundary.
+            if r["status"] == "skipped" and seeders >= rearm:
+                queue_it = False
+            new = "queued" if queue_it else "skipped"
         with get_db() as db:
             db.execute(
                 "UPDATE candidates SET seeders=?,leechers=?,completed=?,endangerment=?,"

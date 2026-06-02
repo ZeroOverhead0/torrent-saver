@@ -52,7 +52,8 @@ async def discover_loop() -> None:
             if not config.is_paused():
                 await scanner.run_scan()
                 if config.get_bool("auto_rescue"):
-                    await actions.rescue_queued()
+                    await actions.rescue_queued(
+                        max_to_add=config.get_int("auto_rescue_max_per_cycle", 3))
         except Exception as e:  # noqa: BLE001
             notify.error("scan", f"discover loop error: {e}")
         await _sleep_minutes("scan_interval_min", 60)

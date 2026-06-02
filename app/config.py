@@ -114,7 +114,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "endangered_max_seeders": "5",       # a torrent is "endangered" at <= this many seeders
     "min_seeders_to_rescue": "1",        # need >=1 seeder to actually download it
     "max_redundancy": "2",               # skip if >= this many healthy near-duplicates exist
-    "redundancy_healthy_seeders": "10",  # a duplicate is "healthy" at >= this many seeders
+    "redundancy_healthy_seeders": "15",  # a duplicate is "healthy" at >= this many seeders (raised: at fleet scale a 10-seeder clone may just be fellow rescuers)
     "dedup_title_similarity": "0.82",    # 0..1 token-set ratio to treat two titles as the same thing
     "dedup_size_tolerance": "0.10",      # +/- fraction on size to treat as the same content
     "scan_interval_min": "60",
@@ -196,6 +196,16 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "install_seed": "",                  # auto-generated once on first use
     "loop_jitter_pct": "0.20",           # ±20% jitter on every background-loop sleep
     "startup_spread_s": "300",           # one-time random boot phase offset (0-300s)
+
+    # Coverage quality (Phase 2) — spread the fleet across the long tail rather
+    # than every install dogpiling the same top-N candidates.
+    "rescue_sampling": "1",              # endangerment-weighted random order (vs strict top-N)
+    "rescue_sampling_sharpness": "1.0",  # >1 re-concentrates toward the most endangered
+    "participation": "1",                # probabilistically deprioritise (not drop) some candidates
+    "participation_max_skip": "0.5",     # skip-prob at endangerment 0; →0 at 100 (never skip critical)
+    "auto_rescue_max_per_cycle": "3",    # cap auto-adds per discover tick (anti-thrash)
+    "graduate_rearm_seeders": "6",       # hysteresis: re-arm a recovered candidate only below this
+    "graduate_stay_probability": "0.10", # rescuer floor: chance an install ANCHORS instead of releasing
 
     # Hardening
     "harden_on_start": "1",              # apply qBit lockdown prefs on startup
