@@ -8,6 +8,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Needed for softprops/action-gh-release to create the Release + upload assets.
+permissions:
+  contents: write
+
 jobs:
   build:
     name: ${{ matrix.os }}
