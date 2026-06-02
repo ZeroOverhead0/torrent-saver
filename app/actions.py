@@ -161,7 +161,8 @@ async def resume_unrestricted() -> int:
 # skip the VPN. A per-row 'legal' flag — e.g. Prowlarr's prowlarr_trust_legal —
 # lets results pass the discovery filter but must NOT exempt arbitrary indexer
 # content from the tunnel (that was a full kill-switch bypass).
-_VPN_EXEMPT_SOURCES = {"internet_archive", "linuxtracker", "academic_torrents"}
+_VPN_EXEMPT_SOURCES = {"internet_archive", "linuxtracker", "academic_torrents",
+                       "distro_radar"}
 
 
 def _seeding_allowed(status, candidate_legal: bool, source: str = "") -> tuple:

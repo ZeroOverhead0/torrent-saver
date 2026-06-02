@@ -63,6 +63,11 @@ PROFILES: dict[str, MachineProfile] = {
         max_disk_bytes=20 * TiB, reserve_bytes=200 * GiB, max_torrents=5000,
         max_torrent_size_bytes=512 * GiB, upload_limit_bytes_s=0,
         ratio_limit=20.0, seeding_time_limit_min=-1, max_connections=2000),
+    "unlimited": MachineProfile(
+        key="unlimited", label="Unlimited (help the network — no caps)",
+        max_disk_bytes=100 * TiB, reserve_bytes=10 * GiB, max_torrents=100000,
+        max_torrent_size_bytes=2 * TiB, upload_limit_bytes_s=0,   # 0 = uncapped upload
+        ratio_limit=-1.0, seeding_time_limit_min=-1, max_connections=5000),  # seed forever
 }
 DEFAULT_PROFILE = "small"
 
@@ -134,12 +139,19 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "academic_torrents_categories": "",  # blank = all
     "manual_entries": "[]",              # JSON list of {value, legal, added}
 
-    # Demand-seeding mode (for users with big upload)
+    # Demand-seeding mode — "help the network": seed the most in-demand torrents.
+    # Defaults target high LEECHER demand (e.g. a just-released distro), not high
+    # seeder counts — your upload helps most where seeders are scarce vs demand.
     "demand_seed_enabled": "0",
-    "demand_min_upload_mbps": "50",      # only engage demand-seeding above this upload speed
+    "demand_min_upload_mbps": "50",      # advisory note for the user; not enforced
     "demand_max_torrents": "20",
-    "demand_min_seeders": "50",          # "in demand" = healthy + many leechers
-    "demand_min_leechers": "20",
+    "demand_min_seeders": "1",           # must be downloadable (>=1 seeder/webseed)
+    "demand_min_leechers": "10",         # "in demand" = at least this many leechers waiting
+    "demand_max_upload": "0",            # HELP THE NETWORK: uncap upload + ratio + seed-time on demand torrents
+    "demand_legal_only": "1",            # demand-seed only legal sources (distro radar); Prowlarr is opt-in
+    "demand_scan_limit": "40",           # max demand candidates to tracker-scrape per cycle
+    "src_distro_radar_enabled": "1",     # legal source: fresh/popular Linux distros for demand-seeding
+    "distro_radar_torrents": "[]",       # extra curated distro magnets/URLs (JSON list of strings)
 
     # VPN / kill-switch
     "vpn_required": "1",                 # refuse to seed unrestricted content without a verified VPN

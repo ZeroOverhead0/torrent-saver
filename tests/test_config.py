@@ -7,7 +7,7 @@ def test_profiles_have_sane_invariants():
         assert p.max_disk_bytes > 0
         assert p.max_torrents > 0
         assert p.max_torrent_size_bytes > 0
-        assert p.ratio_limit > 0
+        assert p.ratio_limit > 0 or p.ratio_limit == -1.0   # -1 = no ratio cap (unlimited)
         assert p.reserve_bytes >= 0
 
 

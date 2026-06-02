@@ -11,7 +11,7 @@ log = logging.getLogger("torrentsaver.sources")
 # Import each source so it self-registers. Guarded so a source whose optional
 # deps/config are missing doesn't break the others.
 for _mod in ("internet_archive", "linuxtracker", "academic_torrents",
-             "prowlarr", "manual"):
+             "prowlarr", "manual", "distro_radar"):
     try:
         __import__(f"app.sources.{_mod}")
     except Exception as e:  # noqa: BLE001

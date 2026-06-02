@@ -91,15 +91,24 @@
   </fieldset>
 
   <fieldset>
-    <legend>Demand-seeding (big-upload users)</legend>
+    <legend>Demand-seeding — help the network</legend>
     <label class="chk"><input type="checkbox" name="demand_seed_enabled" {{ 'checked' if s.get_bool('demand_seed_enabled') }}>
-      Seed the most in-demand torrents (needs Prowlarr + a VPN)</label>
+      <b>Seed the most in-demand torrents.</b> Auto-grabs freshly-released / high-demand
+      legal Linux distros and seeds them. No setup needed.</label>
+    <label class="chk"><input type="checkbox" name="demand_max_upload" {{ 'checked' if s.get_bool('demand_max_upload') }}>
+      <b>Max out upload</b> — uncap upload rate, ratio and seed-time on demand torrents (give the swarm everything).
+      For a fully uncapped machine, also pick the <b>Unlimited</b> profile above.</label>
+    <label class="chk"><input type="checkbox" name="src_distro_radar_enabled" {{ 'checked' if s.get_bool('src_distro_radar_enabled') }}>
+      <b>Distro radar</b> — popular legal Linux distros (LinuxTracker + your curated magnets)</label>
+    <label class="chk"><input type="checkbox" name="demand_legal_only" {{ 'checked' if s.get_bool('demand_legal_only') }}>
+      <b>Legal only</b> — distros only. Untick to also pull in-demand content from your Prowlarr indexers (VPN-gated).</label>
     <div class="grid3">
-      <label>Min upload you have (Mbps)<input type="number" name="demand_min_upload_mbps" value="{{ s.get_str('demand_min_upload_mbps') }}"></label>
       <label>Max demand torrents<input type="number" name="demand_max_torrents" value="{{ s.get_str('demand_max_torrents') }}"></label>
       <label>"In demand" min seeders<input type="number" name="demand_min_seeders" value="{{ s.get_str('demand_min_seeders') }}"></label>
       <label>"In demand" min leechers<input type="number" name="demand_min_leechers" value="{{ s.get_str('demand_min_leechers') }}"></label>
+      <label>Candidates scanned/cycle<input type="number" name="demand_scan_limit" value="{{ s.get_str('demand_scan_limit') }}"></label>
     </div>
+    <label>Extra distro magnets (JSON list)<input type="text" name="distro_radar_torrents" value="{{ s.get_str('distro_radar_torrents') }}"></label>
   </fieldset>
 
   <fieldset>
