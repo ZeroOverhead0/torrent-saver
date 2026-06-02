@@ -12,9 +12,9 @@ import shutil
 import time
 from typing import Optional
 
-from app import ark, config, curator, eviction, hardening, notify, resurrect, vpn
+from app import ark, config, curator, decorrelate, eviction, hardening, notify, resurrect, vpn
 from app.db import DB_PATH, get_db
-from app.endangerment import endangerment_score, is_rescuable
+from app.endangerment import endangerment_score, evaluate_graduation, is_rescuable
 from app.models import Candidate, TrackedTorrent
 from app.qbittorrent import QBitError, get_client
 from app.scrape import scrape_infohash
@@ -182,6 +182,8 @@ async def sync_tracked() -> dict:
 
     category = config.get_str("qbit_category")
     max_seeders = config.get_int("endangered_max_seeders", 5)
+    hist_enabled = config.get_bool("seeder_history_enabled")
+    hist_retain_s = max(config.get_int("graduate_window_min", 360) * 60 * 2, 86400)
     infos = await client.torrents_info(category=category)
     seen = set()
     now = time.time()
@@ -216,6 +218,13 @@ async def sync_tracked() -> dict:
                  t.get("state", ""), seeders, leechers, float(t.get("ratio", 0) or 0),
                  int(t.get("uploaded", 0) or 0), float(t.get("progress", 0) or 0),
                  endanger, now, now))
+            if hist_enabled:
+                db.execute(
+                    "INSERT OR REPLACE INTO seeder_history"
+                    "(infohash,ts,seeders,leechers,num_complete) VALUES (?,?,?,?,?)",
+                    (ih, now, seeders, leechers, seeders))
+        if hist_enabled:
+            db.execute("DELETE FROM seeder_history WHERE ts < ?", (now - hist_retain_s,))
         # Torrents removed from qBittorrent externally -> mark evicted.
         db_rows = db.execute(
             "SELECT infohash FROM tracked WHERE evicted_at IS NULL").fetchall()
@@ -252,6 +261,27 @@ async def rescue_candidate(infohash: str, vpn_status=None) -> dict:
     if not allowed:
         notify.warn("rescue", f"held {cand.name[:60]}: {why}", infohash=infohash)
         return {"ok": False, "error": why}
+
+    # Herd guard: a stale "0 seeders" from an old scan must not send a fleet of
+    # installs at a torrent that's already been revived. Re-scrape live and skip
+    # if the swarm is already saturated. Best-effort — a webseed-only item, no
+    # trackers, or a scrape failure all fall through and rescue normally (the swarm
+    # count stays 0 for webseeds, so they're never wrongly skipped).
+    sat = config.get_int("swarm_saturation_seeders", 4)
+    if sat > 0 and cand.trackers:
+        try:
+            live = await asyncio.to_thread(scrape_infohash, infohash, cand.trackers, 5.0)
+        except Exception:  # noqa: BLE001
+            live = None
+        live_seeders = int((live or {}).get("seeders", 0) or 0)
+        if live_seeders >= sat:
+            with get_db() as db:
+                db.execute(
+                    "UPDATE candidates SET status='skipped', skip_reason=? WHERE infohash=?",
+                    (f"swarm already healthy ({live_seeders} seeders)", infohash))
+            notify.info("rescue",
+                        f"skipped {cand.name[:60]}: swarm already has {live_seeders} seeders")
+            return {"ok": False, "error": f"swarm already healthy ({live_seeders} seeders)"}
 
     client = get_client()
     try:
@@ -417,42 +447,84 @@ def graduation_victims(tracked: list, threshold: int) -> list:
 
 
 async def graduate_recovered() -> dict:
-    """Release torrents whose swarm has fully recovered.
+    """Release torrents whose swarm has FULLY + sustainedly recovered.
 
-    Once a rescued torrent climbs back to ``graduate_seeders`` healthy seeders it
-    no longer needs us — others now hold it, so our job is done. We delete it (and
-    its data) from qBittorrent to free the slot and the disk for the next dying
-    torrent. The metadata ark saved at rescue time keeps the map, so a graduated
-    torrent stays resurrectable if its swarm dies again later. Unlike eviction,
-    this runs proactively — regardless of the disk budget.
-    """
+    A rescued torrent graduates only after its (demand-discounted) seeders stay at
+    or above a per-install threshold across a multi-hour window without declining,
+    and then only after a randomised hold — so a fleet of installs never releases
+    in lockstep and collapses the swarm it just saved. We delete the data to free
+    the slot/disk; the metadata ark keeps the map for resurrection if it dies
+    again. Runs proactively, regardless of the disk budget. See
+    endangerment.evaluate_graduation for the (pure, tested) decision."""
     if not config.get_bool("graduate_enabled"):
         return {"ok": True, "graduated": 0}
-    threshold = config.get_int("graduate_seeders", 10)
-    victims = graduation_victims(live_tracked(), threshold)
-    if not victims:
+
+    # Per-install threshold jitter desyncs WHICH installs let a torrent go.
+    jitter = max(0, config.get_int("graduate_seeders_jitter", 6))
+    cfg = dict(
+        threshold=config.get_int("graduate_seeders", 10)
+        + decorrelate.rng("grad_threshold").randint(0, jitter),
+        window_min=config.get_int("graduate_window_min", 360),
+        min_samples=config.get_int("graduate_min_samples", 6),
+        max_decline_per_hr=config.get_float("graduate_max_decline_per_hr", 1.0),
+        require_demand=config.get_bool("graduate_require_demand"),
+        hard_seeders=config.get_int("graduate_hard_seeders", 40),
+        min_tenure_min=config.get_int("graduate_min_tenure_min", 1440),
+    )
+    hold_max_s = max(0, config.get_int("graduate_hold_max_s", 21600))
+    now = time.time()
+
+    candidates = [t for t in live_tracked()
+                  if (t.mode or "rescue") == "rescue" and (t.progress or 0.0) >= 1.0]
+    if not candidates:
+        return {"ok": True, "graduated": 0}
+
+    releases: list = []
+    with get_db() as db:
+        for t in candidates:
+            row = db.execute("SELECT graduate_eligible_at FROM tracked WHERE infohash=?",
+                             (t.infohash,)).fetchone()
+            eligible_at = row["graduate_eligible_at"] if row else None
+            samples = [(r["ts"], r["seeders"], r["leechers"]) for r in db.execute(
+                "SELECT ts,seeders,leechers FROM seeder_history WHERE infohash=? AND ts>=?",
+                (t.infohash, now - cfg["window_min"] * 60)).fetchall()]
+            # Per-install, per-torrent stable hold so releases scatter across hours.
+            hold_seconds = decorrelate.rng("grad_hold:" + t.infohash).uniform(0, hold_max_s)
+            action = evaluate_graduation(
+                samples=samples, cur_seeders=t.seeders or 0, cur_leechers=t.leechers or 0,
+                added_at=t.added_at or 0.0, eligible_at=eligible_at, now=now,
+                hold_seconds=hold_seconds, **cfg)
+            if action == "set_hold":
+                db.execute("UPDATE tracked SET graduate_eligible_at=? WHERE infohash=?",
+                           (now + hold_seconds, t.infohash))
+            elif action == "clear_hold":
+                db.execute("UPDATE tracked SET graduate_eligible_at=NULL WHERE infohash=?",
+                           (t.infohash,))
+            elif action == "release":
+                releases.append(t)
+
+    if not releases:
         return {"ok": True, "graduated": 0}
 
     client = get_client()
     try:
         if not await client.available():
-            return {"ok": False, "error": "qBittorrent unreachable"}
-    except QBitError as e:
-        return {"ok": False, "error": str(e)}
+            return {"ok": True, "graduated": 0}
+    except QBitError:
+        return {"ok": True, "graduated": 0}
 
-    now = time.time()
     graduated = 0
-    for t in victims:
-        reason = f"graduated ({t.seeders} seeders) — swarm healthy, released to make room"
+    for t in releases:
+        reason = f"graduated ({t.seeders} seeders, sustained) — swarm healthy, released to make room"
         try:
             if await client.delete([t.infohash], delete_files=True):
                 with get_db() as db:
                     db.execute(
-                        "UPDATE tracked SET evicted_at=?, evict_reason=? WHERE infohash=?",
+                        "UPDATE tracked SET evicted_at=?, evict_reason=?, "
+                        "graduate_eligible_at=NULL WHERE infohash=?",
                         (now, reason, t.infohash))
-                    db.execute(
-                        "UPDATE candidates SET status='graduated' WHERE infohash=?",
-                        (t.infohash,))
+                    db.execute("UPDATE candidates SET status='graduated' WHERE infohash=?",
+                               (t.infohash,))
                 notify.decision("graduate",
                                 f"released {t.name[:70]}: {reason}", infohash=t.infohash)
                 graduated += 1

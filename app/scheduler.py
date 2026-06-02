@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app import actions, config, notify, scanner, seeder
+from app import actions, config, decorrelate, notify, scanner, seeder
 
 log = logging.getLogger("torrentsaver.scheduler")
 
@@ -23,7 +23,10 @@ MIN_SLEEP = 30.0          # never spin faster than this, whatever the setting sa
 
 async def _sleep_minutes(key: str, default: int) -> None:
     minutes = config.get_int(key, default)
-    await asyncio.sleep(max(MIN_SLEEP, minutes * 60))
+    base = max(MIN_SLEEP, minutes * 60)
+    # Per-install ±jitter so a fleet of installs doesn't run its loops in lockstep.
+    delay = base * decorrelate.jitter(config.get_float("loop_jitter_pct", 0.20))
+    await asyncio.sleep(max(MIN_SLEEP, delay))
 
 
 async def startup_tasks() -> None:
@@ -40,6 +43,10 @@ async def startup_tasks() -> None:
 
 
 async def discover_loop() -> None:
+    # One-time per-install boot offset so independent installs don't all run
+    # their first scan (and first rescue) at the same instant. Safety tasks in
+    # startup_tasks() are unaffected — only discovery is staggered.
+    await asyncio.sleep(decorrelate.rng("boot").uniform(0, max(0, config.get_int("startup_spread_s", 300))))
     while True:
         try:
             if not config.is_paused():

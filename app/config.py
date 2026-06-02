@@ -164,9 +164,26 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "metadata_ark_enabled": "1",         # save .torrent + metadata to disk so the map survives the data
     "resurrect_search_enabled": "0",     # for truly-dead torrents, search indexers for a downloadable twin
 
-    # Graduation — let a rescued torrent go once its swarm has fully recovered
+    # Graduation — let a rescued torrent go once its swarm has FULLY recovered.
+    # Honest + staggered so a fleet of installs never releases in lockstep.
     "graduate_enabled": "1",             # release (delete + free disk) torrents the swarm no longer needs us for
-    "graduate_seeders": "10",            # graduate when live seeders climb to >= this many
+    "graduate_seeders": "10",            # base healthy-seeder bar
+    "graduate_seeders_jitter": "6",      # per-install random add → effective bar 10-16 (desyncs WHO releases)
+    "graduate_window_min": "360",        # health must hold for this long (6h) before release
+    "graduate_min_samples": "6",         # ...across at least this many monitor samples
+    "graduate_max_decline_per_hr": "1.0",# block release if the swarm is sliding (seeders/hr)
+    "graduate_require_demand": "1",      # discount silent seeders (no leechers) — they may be fellow rescuers
+    "graduate_hold_max_s": "21600",      # randomised 0-6h hold before release (desyncs WHEN)
+    "graduate_hard_seeders": "40",       # overwhelming health → release regardless of jitter/hold
+    "graduate_min_tenure_min": "1440",   # never graduate a torrent rescued < 24h ago
+    "seeder_history_enabled": "1",       # record per-cycle seeder counts (powers honest graduation)
+    "swarm_saturation_seeders": "4",     # at rescue time, skip if the live swarm already has >= this many
+
+    # Decorrelation — a stable per-install random seed colours every randomised
+    # decision so independent installs don't dogpile + release in lockstep.
+    "install_seed": "",                  # auto-generated once on first use
+    "loop_jitter_pct": "0.20",           # ±20% jitter on every background-loop sleep
+    "startup_spread_s": "300",           # one-time random boot phase offset (0-300s)
 
     # Hardening
     "harden_on_start": "1",              # apply qBit lockdown prefs on startup
@@ -205,6 +222,24 @@ def get_float(key: str, default: float = 0.0) -> float:
 def get_str(key: str, default: str = "") -> str:
     v = _raw(key)
     return v if v is not None else default
+
+
+def install_seed() -> int:
+    """A stable per-install 63-bit seed, generated + persisted on first use.
+
+    Every randomised decorrelation decision derives a stream from this, so two
+    independent installs make different choices (and don't dogpile or release in
+    lockstep) — while a single install stays self-consistent across restarts."""
+    raw = get_str("install_seed")
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+    import secrets
+    val = secrets.randbits(63)
+    S.set_setting("install_seed", str(val))
+    return val
 
 
 # Convenience semantic accessors -------------------------------------------- #

@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS tracked (
     evicted_at     REAL,
     evict_reason   TEXT DEFAULT '',
     swarm_revived_at REAL,                     -- set when a 0-seeder swarm gains a real peer
+    graduate_eligible_at REAL,                 -- staggered-release time once it qualifies to graduate
     archived       INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_tracked_mode ON tracked(mode);
@@ -153,6 +154,18 @@ CREATE TABLE IF NOT EXISTS vpn_checks (
     detail      TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_vpn_ts ON vpn_checks(ts DESC);
+
+-- Per-cycle seeder snapshots — powers honest, sustained-health graduation
+-- (so a fleet-inflated instantaneous count can't trigger a synchronized release).
+CREATE TABLE IF NOT EXISTS seeder_history (
+    infohash     TEXT NOT NULL,
+    ts           REAL NOT NULL,
+    seeders      INTEGER DEFAULT 0,
+    leechers     INTEGER DEFAULT 0,
+    num_complete INTEGER DEFAULT 0,
+    PRIMARY KEY (infohash, ts)
+);
+CREATE INDEX IF NOT EXISTS idx_seeder_history ON seeder_history(infohash, ts);
 """
 
 
@@ -217,6 +230,7 @@ _MIGRATIONS = {
     "tracked": [
         ("swarm_revived_at", "REAL"),
         ("archived", "INTEGER DEFAULT 0"),
+        ("graduate_eligible_at", "REAL"),
     ],
 }
 
