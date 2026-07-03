@@ -213,21 +213,22 @@ async def sync_tracked() -> dict:
                 """
                 INSERT INTO tracked
                   (infohash,name,source,size_bytes,category,legal,mode,qbit_state,
-                   seeders,leechers,ratio,uploaded_bytes,progress,endangerment,
+                   seeders,leechers,ratio,uploaded_bytes,downloaded_bytes,progress,endangerment,
                    added_at,last_checked)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(infohash) DO UPDATE SET
                   name=excluded.name, size_bytes=excluded.size_bytes,
                   qbit_state=excluded.qbit_state, seeders=excluded.seeders,
                   leechers=excluded.leechers, ratio=excluded.ratio,
-                  uploaded_bytes=excluded.uploaded_bytes, progress=excluded.progress,
+                  uploaded_bytes=excluded.uploaded_bytes,
+                  downloaded_bytes=excluded.downloaded_bytes, progress=excluded.progress,
                   endangerment=excluded.endangerment, last_checked=excluded.last_checked,
                   evicted_at=NULL, evict_reason=''
                 """,
                 (ih, t.get("name", ih), "qbit", size, category, 0, "rescue",
                  t.get("state", ""), seeders, leechers, float(t.get("ratio", 0) or 0),
-                 int(t.get("uploaded", 0) or 0), float(t.get("progress", 0) or 0),
-                 endanger, now, now))
+                 int(t.get("uploaded", 0) or 0), int(t.get("downloaded", 0) or 0),
+                 float(t.get("progress", 0) or 0), endanger, now, now))
             if hist_enabled:
                 db.execute(
                     "INSERT OR REPLACE INTO seeder_history"

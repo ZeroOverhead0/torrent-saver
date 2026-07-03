@@ -27,9 +27,19 @@ async def torrents(request: Request, view: str = "live", msg: str = ""):
         live_total = db.execute(
             "SELECT COUNT(*) c, COALESCE(SUM(size_bytes),0) b "
             "FROM tracked WHERE evicted_at IS NULL").fetchone()
+        # Lifetime contribution across everything we've ever tracked (live + evicted).
+        totals = db.execute(
+            "SELECT COALESCE(SUM(uploaded_bytes),0) up, "
+            "COALESCE(SUM(downloaded_bytes),0) down FROM tracked").fetchone()
+    rows = [dict(r) for r in rows]
+    up_bytes, down_bytes = totals["up"], totals["down"]
+    overall_ratio = (up_bytes / down_bytes) if down_bytes else 0.0
+    view_up = sum(r.get("uploaded_bytes") or 0 for r in rows)
     return render(request, "torrents.html",
-                  msg=msg, view=view, rows=[dict(r) for r in rows],
+                  msg=msg, view=view, rows=rows,
                   count=live_total["c"], library_bytes=live_total["b"],
+                  up_bytes=up_bytes, down_bytes=down_bytes,
+                  overall_ratio=overall_ratio, view_up=view_up,
                   profile=config.machine_profile())
 
 

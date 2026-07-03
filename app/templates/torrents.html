@@ -11,6 +11,24 @@
   </div>
 </div>
 
+<section class="cards">
+  <div class="card">
+    <div class="card-label">Total uploaded</div>
+    <div class="card-value">{{ up_bytes | bytes }}</div>
+    <div class="card-sub">given back across all tracked torrents</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Overall ratio</div>
+    <div class="card-value">{{ '%.2f' | format(overall_ratio) }}</div>
+    <div class="card-sub">{{ up_bytes | bytes }} up / {{ down_bytes | bytes }} down</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Seeding now</div>
+    <div class="card-value">{{ count }}</div>
+    <div class="card-sub">{{ library_bytes | bytes }} of {{ profile.max_disk_bytes | bytes }}</div>
+  </div>
+</section>
+
 <p class="usage-meta">
   {{ count }}/{{ profile.max_torrents }} torrents · {{ library_bytes | bytes }} of {{ profile.max_disk_bytes | bytes }}
 </p>
@@ -52,6 +70,13 @@
     <tr><td colspan="11" class="empty">Nothing seeded yet.</td></tr>
   {% endfor %}
   </tbody>
+  {% if rows %}
+  <tfoot><tr class="tfoot-total">
+    <td colspan="6">Total uploaded — {{ rows | length }} listed {{ 'evicted' if view=='evicted' else 'live' }} torrent{{ 's' if rows|length != 1 else '' }}</td>
+    <td>{{ view_up | bytes }}</td>
+    <td colspan="{{ 2 if view=='evicted' else 3 }}"></td>
+  </tr></tfoot>
+  {% endif %}
 </table>
 
 {% endblock %}

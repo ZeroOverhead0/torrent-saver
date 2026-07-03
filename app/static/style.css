@@ -71,6 +71,8 @@ h2 { font-size: 15px; margin: 0; }
 .tbl th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--bg2); vertical-align: middle; }
 .tbl tr:hover td { background: var(--panel2); }
+.tbl tfoot td { border-top: 2px solid var(--line); border-bottom: 0; font-weight: 700; }
+.tbl tfoot tr:hover td { background: transparent; }
 .name { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-actions { display: flex; gap: 6px; white-space: nowrap; }
 .empty { color: var(--muted); text-align: center; padding: 18px; }

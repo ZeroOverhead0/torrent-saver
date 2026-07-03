@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS tracked (
     leechers       INTEGER DEFAULT 0,
     ratio          REAL DEFAULT 0,
     uploaded_bytes INTEGER DEFAULT 0,
+    downloaded_bytes INTEGER DEFAULT 0,
     progress       REAL DEFAULT 0,
     endangerment   REAL DEFAULT 0,            -- last computed live endangerment
     added_at       REAL NOT NULL,
@@ -239,6 +240,7 @@ _MIGRATIONS = {
         ("archived", "INTEGER DEFAULT 0"),
         ("graduate_eligible_at", "REAL"),
         ("live_seeders_before", "INTEGER"),    # swarm size when we joined ("am I helping?")
+        ("downloaded_bytes", "INTEGER DEFAULT 0"),   # for honest overall share ratio
     ],
 }
 
