@@ -31,6 +31,8 @@ async def home(request: Request, msg: str = ""):
         qbit_ok = await get_client().available()
     except QBitError:
         qbit_ok = False
+    from app import qbit_service
+    qbit_agent_running = qbit_service.is_running()
 
     return render(request, "home.html",
                   msg=msg,
@@ -41,6 +43,7 @@ async def home(request: Request, msg: str = ""):
                   queued=queued, rescued=rescued, dead=dead,
                   tracked=trow["c"], library_bytes=trow["b"], demand=demand,
                   profile=profile, qbit_ok=qbit_ok,
+                  qbit_agent_running=qbit_agent_running,
                   vpn=latest_vpn(),
                   vpn_required=config.get_bool("vpn_required"),
                   top=[dict(r) for r in top],
@@ -59,3 +62,20 @@ async def toggle_pause(request: Request, paused: str = Form("")):
     new = "0" if config.is_paused() else "1"
     S.set_setting("paused", new)
     return redirect(request, "/", "Paused" if new == "1" else "Resumed")
+
+
+@router.post("/qbittorrent/full-stop")
+async def qbittorrent_full_stop(request: Request):
+    """Fully stop qBittorrent — boot out + disable its KeepAlive LaunchAgent so
+    it cannot respawn. Note: this drops any active seeds until restarted."""
+    from app import qbit_service
+    ok, msg = qbit_service.full_stop()
+    return redirect(request, "/", msg)
+
+
+@router.post("/qbittorrent/start")
+async def qbittorrent_start(request: Request):
+    """Re-enable + bootstrap the qBittorrent LaunchAgent (undo a full stop)."""
+    from app import qbit_service
+    ok, msg = qbit_service.start()
+    return redirect(request, "/", msg)

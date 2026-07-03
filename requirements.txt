@@ -1,10 +1,10 @@
 # Core — required.
-fastapi>=0.110
-uvicorn[standard]>=0.27
-jinja2>=3.1
-python-multipart>=0.0.9
-httpx>=0.26
-platformdirs>=4.0   # per-OS data dir for packaged installs (graceful fallback if absent)
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+jinja2==3.1.6
+python-multipart==0.0.20
+httpx==0.28.1
+platformdirs==4.4.0   # per-OS data dir for packaged installs (graceful fallback if absent)
 
 # Everything torrent-related (bencode, magnet parsing, UDP/HTTP tracker scrape)
 # is implemented in pure-Python stdlib (app/bencode.py, app/scrape.py) so there

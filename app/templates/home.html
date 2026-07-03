@@ -16,7 +16,19 @@
   <div class="card {{ 'good' if qbit_ok else 'bad' }}">
     <div class="card-label">qBittorrent</div>
     <div class="card-value">{{ 'Connected' if qbit_ok else 'Offline' }}</div>
-    <div class="card-sub">{% if not qbit_ok %}<a href="{{ R }}/settings">configure</a>{% else %}engine ready{% endif %}</div>
+    <div class="card-sub">
+      {% if qbit_agent_running %}
+        <form method="post" action="{{ R }}/qbittorrent/full-stop" class="inline"
+              onsubmit="return confirm('Fully stop qBittorrent? This boots out its KeepAlive agent and drops any active seeds until you start it again.');">
+          <button class="btn btn-sm btn-warn">Full stop</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ R }}/qbittorrent/start" class="inline">
+          <button class="btn btn-sm btn-ok">Start engine</button>
+        </form>
+      {% endif %}
+      {% if not qbit_ok and qbit_agent_running %} · <a href="{{ R }}/settings">configure</a>{% endif %}
+    </div>
   </div>
 
   <div class="card {{ 'good' if (vpn and vpn.killswitch and not vpn.leaking) else ('bad' if vpn_required else 'warn') }}">
